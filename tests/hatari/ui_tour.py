@@ -28,7 +28,7 @@ try:
     time.sleep(14)
     r.shot("01-start")
 
-    r.click(330, 104)                    # the second message (in the cache)
+    r.click(330, 124)                    # the second message (in the cache)
     time.sleep(1.5)
     r.shot("02-read-hebrew")
 

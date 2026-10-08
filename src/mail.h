@@ -26,6 +26,7 @@ int  mail_check(ACCOUNT *a, long *newmsgs);
 char *mail_fetch(FOLDER *f, HDR *h, long *len);
 int  mail_flag(FOLDER *f, HDR *h, unsigned short flags, int add);
 int  mail_delete(FOLDER *f, HDR *h);
+int  mail_mark_all_read(ACCOUNT *a, FINFO *fi);	/* the whole folder, on the server too */
 int  mail_move(FOLDER *f, HDR *h, FINFO *dest);
 
 int  mail_queue(ACCOUNT *a, const char *raw, long len);	/* into the Outbox */

@@ -75,7 +75,7 @@ ok = False
 try:
     time.sleep(40)                       # boot, log in, mirror the inbox
     r.shot("n1-inbox")
-    r.click(330, 88)                     # newest message: the Hebrew one
+    r.click(330, 108)                    # newest message: the Hebrew one
     time.sleep(12)                       # downloaded over the serial line
     r.shot("n2-read")
     r.ctrl("r")                          # reply

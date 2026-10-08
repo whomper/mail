@@ -118,6 +118,43 @@ short form_do(OBJECT *tree, short start)
 	return aes(50, 1, 1, 1, 0);
 }
 
+short form_keybd(OBJECT *tree, short obj, short next, short ch, short *onext, short *och)
+{
+	short r;
+	aintin[0] = obj;
+	aintin[1] = ch;
+	aintin[2] = next;
+	addrin[0] = tree;
+	r = aes(55, 3, 3, 1, 0);
+	*onext = aintout[1];
+	*och = aintout[2];
+	return r;
+}
+
+short form_button(OBJECT *tree, short obj, short clicks, short *onext)
+{
+	short r;
+	aintin[0] = obj;
+	aintin[1] = clicks;
+	addrin[0] = tree;
+	r = aes(56, 2, 2, 1, 0);
+	*onext = aintout[1];
+	return r;
+}
+
+short objc_edit(OBJECT *tree, short obj, short ch, short *idx, short kind)
+{
+	short r;
+	aintin[0] = obj;
+	aintin[1] = ch;
+	aintin[2] = *idx;
+	aintin[3] = kind;
+	addrin[0] = tree;
+	r = aes(46, 4, 2, 1, 0);
+	*idx = aintout[1];
+	return r;
+}
+
 short form_center(OBJECT *tree, short *x, short *y, short *w, short *h)
 {
 	short r;
@@ -497,6 +534,55 @@ void vrt_cpyfm(short h, short mode, const short *pxy, MFDB *src, MFDB *dst, cons
 	contrl[9] = (short)((u32)dst >> 16);
 	contrl[10] = (short)((u32)dst & 0xffff);
 	vdi(121, 4, 3, h);
+}
+
+short vq_gdos(void)
+{
+	register long r __asm__("d0");
+	__asm__ volatile("moveq #-2,%%d0\n\ttrap #2"
+		: "=r"(r) : : "d1", "d2", "a0", "a1", "a2", "memory", "cc");
+	return (short)r != -2;
+}
+
+short vst_load_fonts(short h, short select)
+{
+	vintin[0] = select;
+	vdi(119, 0, 1, h);
+	return vintout[0];
+}
+
+short vqt_name(short h, short index, char *name)
+{
+	short i;
+	vintin[0] = index;
+	vdi(130, 0, 1, h);
+	for (i = 0; i < 32; i++)
+		name[i] = (char)vintout[1 + i];
+	name[32] = 0;
+	return vintout[0];
+}
+
+short vst_font(short h, short id)
+{
+	vintin[0] = id;
+	vdi(21, 0, 1, h);
+	return vintout[0];
+}
+
+short vst_point(short h, short point, short *cw_, short *ch_)
+{
+	vintin[0] = point;
+	vdi(107, 0, 1, h);
+	*cw_ = ptsout[2];
+	*ch_ = ptsout[3];
+	return vintout[0];
+}
+
+short vqt_width(short h, short c)
+{
+	vintin[0] = c;
+	vdi(117, 0, 1, h);
+	return ptsout[0];
 }
 
 void v_hide_c(short h) { vdi(123, 0, 0, h); }

@@ -37,6 +37,7 @@ struct WIN {
 
 /* screen and font */
 extern short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
+extern short gl_wchar, gl_hchar;	/* the AES's system font cell (menus, dialogs) */
 extern short ap_id;
 
 /* windows (win.c) */
@@ -118,6 +119,29 @@ FINFO *dlg_pick_folder(ACCOUNT *a, const char *title);
 ACCOUNT *dlg_pick_account(const char *title);
 void dlg_about(void);
 short alert(short def, const char *fmt, ...);
+
+/* menu commands (main.c) */
+enum {
+	C_NONE, C_ABOUT,
+	C_NEW, C_CHECK, C_SENDQ, C_SAVEATT, C_QUIT,
+	C_REPLY, C_REPLYALL, C_FORWARD, C_UNREAD, C_MARKREAD, C_FLAG, C_MOVE, C_DELETE,
+	C_SEND, C_SAVEOUT, C_ATTACH, C_ABOOK,
+	C_FOLDERS, C_REFRESH, C_NEWFOLDER, C_DELFOLDER,
+	C_ACCOUNTS, C_SETTINGS, C_FONT, C_OFFLINE, C_HEBREW, C_LOG,
+	C_SEP, C_ACC
+};
+void ui_command(short cmd);
+void cmd_new_folder(ACCOUNT *a);
+void cmd_delete_folder(ACCOUNT *a, FINFO *fi);
+void cmd_edit_account(ACCOUNT *a);
+void cmd_refresh_folders(ACCOUNT *a);
+
+/* right-click menus (popup.c): the chosen item, or -1 */
+short popup(short x, short y, const char *const *labels, short n);
+
+/* font.c */
+void font_apply(void);		/* opt.font_id/pt -> cw, ch */
+void font_menu(void);
 
 /* main.c */
 void status(const char *msg);

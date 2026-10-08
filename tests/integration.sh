@@ -219,6 +219,10 @@ out=$(run show 1 Big "$U")
 out=$(run sync 1 Big)
 expect "reading updates the server's unread count" "synced: 250 total, 5 unread" "$out"
 
+out=$(run allread 1 Big)
+out=$(run sync 1 Big)
+expect "mark all as read reaches the server" "synced: 250 total, 0 unread" "$out"
+
 out=$(run clearcache)
 out=$(run show 1 INBOX "$U4")
 expect "body downloaded again after clearing the cache" "שלום דנה," "$out"

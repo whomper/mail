@@ -47,29 +47,66 @@ Options > Accounts > New, or the dialog MAIL shows at first start:
 | User, Password | your login (for Gmail: an app password)                          |
 | POP3: leave mail on the server | keep a copy on the server after downloading    |
 | Outgoing       | the Pi's IP and 1025 through the gateway; leave User empty to use the incoming login, or type `-` for a server that needs none |
+| Passwords      | shown as `*`; click the eye beside the field to see what you typed |
 | Signature      | added below new messages; `|` starts a new line                  |
 
 MAIL holds up to eight accounts. Edit or delete one with Options >
 Accounts > Edit. Passwords are kept in `MAIL.INF` as typed, so keep that
 file to yourself.
 
-## The windows
+## The main window
 
-MAIL has four windows, like the GFA Troll it follows:
+MAIL's main window has three panes, like the GFA Troll it follows and
+like a modern mail program:
 
 - **Folders** (left): each account with its folders and unread counts.
   Click a folder to open it. Click an account's name to check its mail.
 - **Messages** (top right): newest first. Unread messages are bold with
   a dot; `!` is flagged, `R` answered, `@` probably has attachments. In
-  Sent and the Outbox it shows who you wrote to.
+  Sent and the Outbox it shows who you wrote to. Its header shows how
+  many messages are loaded and how many there are.
 - **Message** (bottom right): the selected message. Click an attachment
   line (`»`) to save it with the file selector. HTML-only mail is shown
   as text. Quoted lines are drawn light.
-- **New message**: the editor, opened by New, Reply and Forward.
+
+**Drag the dividers** between the panes to size them; the pointer turns
+into arrows over a divider. Each pane has its own scroll bar. The pane
+with the dark header has the keyboard: click a pane, or press Tab to
+move on. The main window's own place and size, the dividers, the
+editor's place and the font are all kept in `MAIL.INF` for next time.
 
 Click a message to read it. Up and Down move through the list; Return
-brings the message window to the front. In the message window Space and
-Backspace page down and up.
+moves the keyboard to the message. In the message pane Space and
+Backspace page down and up. Closing the main window quits MAIL.
+
+**Big folders.** MAIL loads a folder 100 messages at a time, newest
+first (Options > Settings changes how many). When there are older ones,
+the last line of the list says **Load 100 more**: click it, or move onto
+it with Down and press Return. Only what you load is mirrored, so a Sent
+folder with thousands of messages opens as quickly as a small one.
+
+**Right-click** anything for what you can do with it:
+
+| On            | Menu                                                                   |
+|---------------|------------------------------------------------------------------------|
+| a message     | Open, Reply, Reply to all, Forward, Mark as read/unread, Flag, Move to, Delete |
+| a folder      | Open, Check for new mail, Mark all as read, New folder, Delete folder  |
+| an account    | Check mail, New message, Edit account, Refresh folder list             |
+| an attachment | Save attachment                                                        |
+| the editor    | Send now, Put in Outbox, Attach file, Address book, Hebrew keyboard    |
+
+Pick with a click, press-drag-release, or the arrow keys and Return;
+Esc closes the menu.
+
+**New message** opens the editor in a window of its own.
+
+**Options > Font** picks the font for the text in the panes and the
+editor: the system font at its normal, small (8×8) or large (8×16)
+size, and, with a GDOS such as NVDI or SpeedoGDOS, every monospaced
+font it has. Menus and dialogs keep the system font. Hebrew needs a font
+with the Atari's Hebrew letters, which the system font has.
+
+**About MAIL** (first menu) shows the version and how MAIL is connected.
 
 ## Writing
 
@@ -126,12 +163,14 @@ so those are left out when showing a message.
 | Ctrl+T       | attach a file              | Ctrl+B       | address book            |
 | F10          | Hebrew keyboard on/off     | Help         | these keys              |
 | Esc          | close the editor           | Ctrl+Q       | quit                    |
+| Tab          | next pane                  | Right button | what you can do there   |
 
 ## How your mail is kept
 
-**IMAP** accounts are mirrored: MAIL keeps the headers of the newest 300
-messages of each folder (Options > Settings) and the messages you have
-read. Changes made elsewhere (read, deleted, moved on your phone) show up
+**IMAP** accounts are mirrored: MAIL keeps the headers of the newest
+messages of each folder, as many as you have loaded (100 to start with),
+and the messages you have read; the counts in the folder pane are the
+server's. Changes made elsewhere (read, deleted, moved on your phone) show up
 at the next check. Deleting moves a message to Trash on the server;
 deleting in Trash removes it for good.
 
@@ -145,15 +184,25 @@ read everything already on disk. New messages wait in the Outbox.
 
 **Settings** (Options > Settings): your time zone in minutes east of UTC
 (Israel: 120 in winter, 180 in summer), automatic checking every N
-minutes, how many headers to keep, whether read messages stay on disk
+minutes, how many messages to load at a time, whether read messages stay on disk
 after quitting, the protocol log, and the keyboard MAIL starts with.
 
 ## Folders
 
 Folder > New folder makes a folder on the IMAP server (Hebrew names
-work). Folder > Delete folder removes the open one with all its messages.
+work). Folder > Delete folder removes the open one with all its messages;
+right-click a folder to do this for any folder, or to mark all its
+messages as read.
 Folder > Refresh folder list reads the list again after you changed it
 elsewhere.
+
+## The desktop icon
+
+`icons/` has MAIL's icon for the desktop: `MAIL.RSC` holds a black and
+white and a 16-colour version to copy into `DESKICON.RSC` /
+`DESKCICN.RSC` with a resource editor, and `MAIL.ICN` / `MAILMK.ICN` are
+the image and mask for icon editors. For EmuTOS,
+`tools/icon/add_to_emuicon.py` adds it to `EMUICON.RSC`.
 
 ## When something goes wrong
 

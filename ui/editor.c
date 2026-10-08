@@ -632,6 +632,28 @@ static void click(WIN *w, short mx, short my, short clicks, short kstate)
 	move_to(line, col);
 }
 
+static void rclick(WIN *w, short mx, short my)
+{
+	const char *lab[8];
+	short r;
+	(void)w;
+	lab[0] = "Send now          ^S";
+	lab[1] = "Put in Outbox";
+	lab[2] = "-";
+	lab[3] = "Attach file...    ^T";
+	lab[4] = "Address book...   ^B";
+	lab[5] = "-";
+	lab[6] = hebrew_kbd ? "\x08Hebrew keyboard F10" : "Hebrew keyboard   F10";
+	r = popup(mx, my, lab, 7);
+	switch (r) {
+	case 0: editor_send(1); break;
+	case 1: editor_send(0); break;
+	case 3: editor_attach(); break;
+	case 4: editor_insert_address(); break;
+	case 6: set_hebrew_kbd(!hebrew_kbd); break;
+	}
+}
+
 void editor_init(void);
 void editor_init(void)
 {
@@ -639,6 +661,7 @@ void editor_init(void)
 	w_editor.draw = draw;
 	w_editor.key = key;
 	w_editor.click = click;
+	w_editor.rclick = rclick;
 	w_editor.closed = closed;
 	w_editor.resized = resized;
 	strcpy(w_editor.title, " New message ");

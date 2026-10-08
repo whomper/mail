@@ -238,6 +238,11 @@ int main(int argc, char **argv)
 			return fail(cmd);
 		printf("ok\n");
 		r = 0;
+	} else if (!strcmp(cmd, "allread") && a && argc > 4) {
+		FINFO *fi = find_folder(a, argv[4]);
+		if (!fi || !mail_mark_all_read(a, fi))
+			return fail("allread");
+		printf("ok\n");
 	} else if (!strcmp(cmd, "mkdir") && a && argc > 4) {
 		char *at = cs_to_atari(argv[4], strlen(argv[4]), CS_UTF8, 0);
 		if (!mail_folder_create(a, at))

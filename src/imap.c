@@ -558,6 +558,13 @@ int imap_store(IMAP *im, const char *uidset, int add, unsigned short flags)
 	return run(im, 0, 0, 0, "UID STORE %s %cFLAGS.SILENT %s", uidset, add ? '+' : '-', fs);
 }
 
+int imap_store_seq(IMAP *im, const char *seqset, int add, unsigned short flags)
+{
+	char fs[120];
+	flags_str(fs, flags);
+	return run(im, 0, 0, 0, "STORE %s %cFLAGS.SILENT %s", seqset, add ? '+' : '-', fs);
+}
+
 int imap_copy(IMAP *im, const char *uidset, const char *dest)
 {
 	char q[300];

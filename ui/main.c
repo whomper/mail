@@ -13,6 +13,7 @@
 #include "../src/util.h"
 
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
+short gl_wchar, gl_hchar;
 short ap_id;
 short hebrew_kbd;
 static short quit;
@@ -25,15 +26,6 @@ void editor_init(void);
 
 /* ---------------- menu ---------------- */
 
-enum {
-	C_NONE, C_ABOUT,
-	C_NEW, C_CHECK, C_SENDQ, C_SAVEATT, C_QUIT,
-	C_REPLY, C_REPLYALL, C_FORWARD, C_UNREAD, C_FLAG, C_MOVE, C_DELETE,
-	C_SEND, C_SAVEOUT, C_ATTACH, C_ABOOK,
-	C_FOLDERS, C_REFRESH, C_NEWFOLDER, C_DELFOLDER,
-	C_ACCOUNTS, C_SETTINGS, C_OFFLINE, C_HEBREW, C_LOG,
-	C_SEP, C_ACC
-};
 
 typedef struct {
 	const char *text;
@@ -67,6 +59,7 @@ static const MITEM m_fold[] = {
 };
 static const MITEM m_opts[] = {
 	{ "  Accounts...         ", C_ACCOUNTS }, { "  Settings...         ", C_SETTINGS },
+	{ "  Font...             ", C_FONT },
 	{ "----------------------", C_SEP }, { "  Work offline        ", C_OFFLINE },
 	{ "  Hebrew keyboard F10 ", C_HEBREW }, { "  Protocol log        ", C_LOG }, { 0, 0 }
 };
@@ -90,7 +83,7 @@ static short find_item(short cmd)
 
 static void menu_build(void)
 {
-	short n = 0, t, i, cols = scr_w / cw, x = 0;
+	short n = 0, t, i, cols = scr_w / gl_wchar, x = 0;
 	short first_title, first_drop, screen, prev_drop = -1;
 	memset(menu, 0, sizeof(menu));
 	/* 0 root, 1 bar, 2 active (titles), titles, screen, drops */
@@ -98,7 +91,7 @@ static void menu_build(void)
 	menu[0].ob_next = -1;
 	menu[0].ob_head = 1;
 	menu[0].ob_width = cols;
-	menu[0].ob_height = scr_h / ch;
+	menu[0].ob_height = scr_h / gl_hchar;
 	menu[1].ob_type = G_BOX;
 	menu[1].ob_spec = 0x1100L;
 	menu[1].ob_head = menu[1].ob_tail = 2;
@@ -476,10 +469,10 @@ static void cmd_accounts(void)
 	}
 }
 
-static void cmd_new_folder(void)
+void cmd_new_folder(ACCOUNT *a)
 {
 	char name[48] = "";
-	if (!cur_acct || cur_acct->pop)
+	if (!a || a->pop)
 		return;
 	if (!dlg_ask("New folder", "Name:", name, 40))
 		return;
@@ -488,7 +481,7 @@ static void cmd_new_folder(void)
 		str_copy(server, cur_finfo ? cur_finfo->server : "", sizeof(server));
 		busy(1);
 		mail_err[0] = 0;
-		if (!mail_folder_create(cur_acct, name))
+		if (!mail_folder_create(a, name))
 			alert(1, "[1][%s][ OK ]", mail_err);
 		busy(0);
 		refind_current(server);
@@ -496,29 +489,69 @@ static void cmd_new_folder(void)
 	folders_build();
 }
 
-static void cmd_delete_folder(void)
+void cmd_delete_folder(ACCOUNT *a, FINFO *fi)
 {
-	if (!cur_acct || !cur_finfo || cur_finfo->local || cur_finfo->role)
+	char server[160];
+	if (!a || !fi || fi->local || fi->role)
 		return;
 	if (alert(2, "[2][Delete the folder|\"%s\"|and all its messages|on the server?][Delete|Cancel]",
-		  cur_finfo->disp) != 1)
+		  fi->disp) != 1)
 		return;
-	{
-		FINFO *fi = cur_finfo;
+	str_copy(server, cur_finfo && cur_finfo != fi ? cur_finfo->server : "", sizeof(server));
+	if (fi == cur_finfo) {
 		if (cur_folder)
 			fold_close(cur_folder);
 		cur_folder = 0;
 		cur_finfo = 0;
 		reader_clear();
 		list_load();
-		busy(1);
-		mail_err[0] = 0;
-		if (!mail_folder_delete(cur_acct, fi))
-			alert(1, "[1][%s][ OK ]", mail_err);
-		busy(0);
 	}
+	busy(1);
+	mail_err[0] = 0;
+	if (!mail_folder_delete(a, fi))
+		alert(1, "[1][%s][ OK ]", mail_err);
+	busy(0);
+	if (cur_acct == a)
+		refind_current(server);
 	folders_build();
 	menu_update();
+}
+
+/* edit one account (from its right-click menu) */
+void cmd_edit_account(ACCOUNT *a)
+{
+	short r = (short)dlg_account(a);
+	if (r < 0) {
+		if (cur_acct == a) {
+			if (cur_folder)
+				fold_close(cur_folder);
+			cur_folder = 0;
+			cur_finfo = 0;
+			cur_acct = 0;
+			reader_clear();
+			list_load();
+		}
+		acct_delete(a);
+	} else if (r > 0) {
+		mail_disconnect(a);
+	}
+	store_save_settings();
+	folders_build();
+	menu_update();
+}
+
+void cmd_refresh_folders(ACCOUNT *a)
+{
+	char server[160];
+	str_copy(server, cur_finfo ? cur_finfo->server : "", sizeof(server));
+	busy(1);
+	mail_err[0] = 0;
+	if (!mail_refresh_folders(a) && mail_err[0])
+		alert(1, "[1][%s][ OK ]", mail_err);
+	busy(0);
+	if (cur_acct == a)
+		refind_current(server);
+	folders_build();
 }
 
 static void wait_release(void)
@@ -561,6 +594,12 @@ void main_closed(void)
 	do_quit();
 }
 
+static void command(short cmd);
+void ui_command(short cmd)
+{
+	command(cmd);
+}
+
 static void command(short cmd)
 {
 	switch (cmd) {
@@ -594,6 +633,7 @@ static void command(short cmd)
 	case C_REPLYALL: cmd_reply(1, 0); break;
 	case C_FORWARD: cmd_reply(0, 1); break;
 	case C_UNREAD: cmd_flag(MF_SEEN, 0); break;
+	case C_MARKREAD: cmd_flag(MF_SEEN, 1); break;
 	case C_FLAG: cmd_flag(MF_FLAGGED, 1); break;
 	case C_MOVE: cmd_move(); break;
 	case C_DELETE: cmd_delete(); break;
@@ -620,8 +660,8 @@ static void command(short cmd)
 		folders_build();
 		break;
 	}
-	case C_NEWFOLDER: cmd_new_folder(); break;
-	case C_DELFOLDER: cmd_delete_folder(); break;
+	case C_NEWFOLDER: cmd_new_folder(cur_acct); break;
+	case C_DELFOLDER: cmd_delete_folder(cur_acct, cur_finfo); break;
 	case C_ACCOUNTS: cmd_accounts(); break;
 	case C_SETTINGS:
 		if (dlg_settings()) {
@@ -641,6 +681,7 @@ static void command(short cmd)
 		list_titles();
 		break;
 	case C_HEBREW: set_hebrew_kbd(!hebrew_kbd); break;
+	case C_FONT: font_menu(); break;
 	case C_LOG:
 		opt.log = !opt.log;
 		set_logging();
@@ -743,7 +784,9 @@ int main(void)
 	ap_id = appl_init();
 	if (ap_id < 0)
 		return 1;
-	vdi_h = graf_handle(&cw, &ch, &d, &d);
+	vdi_h = graf_handle(&gl_wchar, &gl_hchar, &d, &d);
+	cw = gl_wchar;
+	ch = gl_hchar;
 	(void)work_in_dummy;
 	vdi_h = v_opnvwk_(vdi_h, work_out);
 	scr_w = work_out[0] + 1;
@@ -756,6 +799,7 @@ int main(void)
 
 	work_dir(dir, sizeof(dir));
 	store_init(dir);
+	font_apply();
 	hebrew_kbd = opt.hebrew;
 	set_logging();
 	net_init();

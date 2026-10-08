@@ -319,6 +319,20 @@ static void click(WIN *w, short mx, short my, short clicks, short kstate)
 		reader_save_attachment(lines[i].attach);
 }
 
+void message_menu(short mx, short my, int with_open);
+
+static void rclick(WIN *w, short mx, short my)
+{
+	long i = w->top + (my - w->work.y) / ch;
+	if (i >= 0 && i < nlines && lines[i].kind == L_ATTACH) {
+		static const char *const lab[] = { "Save attachment..." };
+		if (popup(mx, my, lab, 1) == 0)
+			reader_save_attachment(lines[i].attach);
+		return;
+	}
+	message_menu(mx, my, 0);
+}
+
 static int key(WIN *w, short kstate, short k)
 {
 	long rows = win_rows(w);
@@ -339,6 +353,7 @@ void reader_init(void)
 	w_reader.pane = 1;
 	w_reader.draw = draw;
 	w_reader.click = click;
+	w_reader.rclick = rclick;
 	w_reader.key = key;
 	w_reader.resized = resized;
 	strcpy(w_reader.title, "Message");

@@ -310,6 +310,58 @@ static void click(WIN *w, short mx, short my, short clicks, short kstate)
 	select_row(i, clicks > 1);
 }
 
+/* the message menu, shared with the reader */
+void message_menu(short mx, short my, int with_open)
+{
+	HDR *h = cur_folder ? fold_get(cur_folder, cur_uid) : 0;
+	const char *lab[10];
+	short cmd[10], n = 0, r;
+	if (!h || !cur_msg)
+		return;
+	if (with_open) {
+		lab[n] = "Open";
+		cmd[n++] = -1;
+	}
+	lab[n] = "Reply            ^R";
+	cmd[n++] = C_REPLY;
+	lab[n] = "Reply to all     ^E";
+	cmd[n++] = C_REPLYALL;
+	lab[n] = "Forward          ^F";
+	cmd[n++] = C_FORWARD;
+	lab[n] = "-";
+	cmd[n++] = 0;
+	lab[n] = (h->flags & MF_SEEN) ? "Mark as unread   ^U" : "Mark as read";
+	cmd[n++] = (h->flags & MF_SEEN) ? C_UNREAD : C_MARKREAD;
+	lab[n] = (h->flags & MF_FLAGGED) ? "Remove the flag  ^G" : "Flag             ^G";
+	cmd[n++] = C_FLAG;
+	lab[n] = "Move to...       ^M";
+	cmd[n++] = C_MOVE;
+	lab[n] = "-";
+	cmd[n++] = 0;
+	lab[n] = "Delete          Del";
+	cmd[n++] = C_DELETE;
+	r = popup(mx, my, lab, n);
+	if (r < 0)
+		return;
+	if (cmd[r] == -1)
+		win_focus(&w_reader);
+	else if (cmd[r])
+		ui_command(cmd[r]);
+}
+
+static void rclick(WIN *w, short mx, short my)
+{
+	long i;
+	if (my < w->work.y + w->head_h)
+		return;
+	i = w->top + (my - w->work.y - w->head_h) / ch;
+	if (i < 0 || i >= nview)
+		return;
+	if (cur_folder->h[view[i]].uid != cur_uid || !cur_msg)
+		select_row(i, 0);
+	message_menu(mx, my, 1);
+}
+
 static int key(WIN *w, short kstate, short k)
 {
 	short scan = KEY_SCAN(k);
@@ -339,6 +391,7 @@ void list_init(void)
 	w_list.pane = 1;
 	w_list.draw = draw;
 	w_list.click = click;
+	w_list.rclick = rclick;
 	w_list.key = key;
 	strcpy(w_list.title, "Messages");
 }

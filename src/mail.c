@@ -618,6 +618,35 @@ static void count_gone(FOLDER *f, HDR *h)
 		f->exists--;
 }
 
+int mail_mark_all_read(ACCOUNT *a, FINFO *fi)
+{
+	FOLDER *f;
+	long i;
+	if (!fi->local) {
+		int r;
+		if (!select_folder(a, fi))
+			return 0;
+		if (a->im->exists) {
+			r = imap_store_seq(a->im, "1:*", 1, MF_SEEN);
+			if (r <= 0)
+				return imap_failed(a, r);
+		}
+		fi->unread = 0;
+	}
+	f = fold_open(a, fi);
+	if (!f)
+		return 0;
+	for (i = 0; i < f->n; i++) {
+		if (!(f->h[i].flags & MF_SEEN)) {
+			f->h[i].flags |= MF_SEEN;
+			f->dirty = 1;
+		}
+	}
+	fold_close(f);
+	folders_save(a);
+	return 1;
+}
+
 /* copy a local message file into another local folder */
 static int local_copy(FOLDER *f, HDR *h, FINFO *dest)
 {

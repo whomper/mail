@@ -1,12 +1,15 @@
 # MAIL
 
+<img src="docs/icon16.png" width="96" align="right" alt="MAIL icon: an Atari SM124-style monitor showing an envelope">
+
 An e-mail program for the Atari ST, STE, TT and Falcon, written in C for
 GEM. It reads mail over IMAP or POP3, sends it over SMTP, keeps a mirror
 of your IMAP folders on disk so you can read offline, and reads and
 writes Hebrew.
 
 - IMAP with a local mirror: headers of the newest messages and every
-  message you've read, kept in step with the server
+  message you've read, kept in step with the server; big folders load
+  100 messages at a time, with "Load more" for older ones
 - POP3 that downloads into local folders and never fetches a message twice
 - SMTP with login (AUTH PLAIN/LOGIN), an Outbox for sending later, copies
   in Sent
@@ -17,6 +20,9 @@ writes Hebrew.
 - Hebrew: UTF-8, ISO-8859-8 and windows-1255 mail, Hebrew subjects, names,
   file names and folder names, right-to-left layout, and the Israeli
   keyboard on F10
+- One main window with draggable panes (folders, list, message), right-click
+  menus, a choice of fonts (GDOS fonts too), passwords hidden behind an eye
+  button; window and pane sizes are kept between sessions
 - Runs on TOS 1.04 to 4.x, EmuTOS, MagiC and MiNT, with STinG or
   MiNTnet; from a 68000 ST in medium resolution to a Falcon in 640×480
 
@@ -68,7 +74,8 @@ src/     the mail core: IMAP, POP3, SMTP, MIME, charsets and Hebrew,
 ui/      the GEM program: windows, drawing, editor, dialogs, menus
 gateway/ the Raspberry Pi gateway (stunnel)
 tests/   unit and integration tests, the Hatari test rig
-tools/   elf2tos.py, FAKESTNG.PRG (for testing in Hatari only)
+tools/   elf2tos.py, the icon generator, FAKESTNG.PRG (for testing in Hatari only)
+icons/   MAIL's desktop icon (RSC and ICN files)
 ```
 
 ## Tests

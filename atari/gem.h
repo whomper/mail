@@ -124,6 +124,18 @@ short rsrc_load(const char *name);
 short aes_version(void);
 short fsel_exinput(char *path, char *name, short *button, const char *title);
 short form_do(OBJECT *tree, short start);
+short form_keybd(OBJECT *tree, short obj, short next, short ch, short *onext, short *och);
+short form_button(OBJECT *tree, short obj, short clicks, short *onext);
+short objc_edit(OBJECT *tree, short obj, short ch, short *idx, short kind);
+#define ED_INIT 1
+#define ED_CHAR 2
+#define ED_END  3
+
+typedef struct {
+	void *bi_pdata;
+	short bi_wb, bi_hl, bi_x, bi_y, bi_color;
+} BITBLK;
+#define G_IMAGE 23
 short form_center(OBJECT *tree, short *x, short *y, short *w, short *h);
 short objc_find(OBJECT *tree, short start, short depth, short x, short y);
 short objc_offset(OBJECT *tree, short obj, short *x, short *y);
@@ -177,6 +189,12 @@ typedef struct {
 void vro_cpyfm(short h, short mode, const short *pxy, MFDB *src, MFDB *dst);
 void vrt_cpyfm(short h, short mode, const short *pxy, MFDB *src, MFDB *dst, const short *colors);
 void vq_extnd(short h, short owflag, short *work_out);
+short vq_gdos(void);			/* 1 if a GDOS (NVDI, SpeedoGDOS...) is loaded */
+short vst_load_fonts(short h, short select);
+short vqt_name(short h, short index, char *name);	/* -> font id; name of 33 chars */
+short vst_font(short h, short id);
+short vst_point(short h, short point, short *cw, short *ch);
+short vqt_width(short h, short c);	/* cell width of character c */
 void v_hide_c(short h);
 void v_show_c(short h, short reset);
 

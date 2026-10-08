@@ -10,7 +10,8 @@
 #include "charset.h"
 #include "util.h"
 
-#define VERSION_UA "MAIL 0.1 (Atari ST/Falcon)"
+#include "version.h"
+#define VERSION_UA "MAIL/" MAIL_VERSION " (Atari ST/TT/Falcon)"
 
 int addr_list(const char *s, char out[][160], int max)
 {

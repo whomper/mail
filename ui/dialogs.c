@@ -14,6 +14,8 @@
 #define TMAX 24
 
 static OBJECT tree[DMAX];
+static void make_eyes(void);
+static short npw;
 static TEDINFO ted[TMAX];
 static char tmpl[TMAX][64], valid[TMAX][64];
 static short nobj, nted, last_child;
@@ -22,6 +24,12 @@ static short nobj, nted, last_child;
 
 static void d_begin(short w, short h)
 {
+	static short eyes_made;
+	if (!eyes_made) {
+		make_eyes();
+		eyes_made = 1;
+	}
+	npw = 0;
 	memset(tree, 0, sizeof(tree));
 	nobj = 1;
 	nted = 0;
@@ -108,17 +116,213 @@ static void d_end(void)
 		rsrc_obfix(tree, i);
 }
 
+/* ---------------- password fields ----------------
+ * GEM's text fields can't hide what they show, so a password field
+ * shows a row of '*' while the real text is kept aside; the eye button
+ * next to it shows it in clear. form_loop() below is form_do() written
+ * out with form_keybd/form_button/objc_edit, so it can type into a
+ * password field itself. */
+
+#define PWMAX 2
+
+typedef struct {
+	short obj, eye;		/* the text field and its eye button */
+	char *real;		/* the password */
+	short max;
+	char shown[48];		/* what the field displays */
+	short clear;		/* 1: shown in clear */
+} PWFIELD;
+
+static PWFIELD pwf[PWMAX];
+
+/* the eye: 16 pixels wide, 16 rows (8 on ST medium), open and crossed */
+static const char *const eye_art[16] = {
+	"................",
+	"................",
+	"................",
+	".....######.....",
+	"...##......##...",
+	"..#....##....#..",
+	".#....####....#.",
+	"#.....####.....#",
+	".#....####....#.",
+	"..#....##....#..",
+	"...##......##...",
+	".....######.....",
+	"................",
+	"................",
+	"................",
+	"................",
+};
+static unsigned short eye_open[16], eye_shut[16];
+static BITBLK eye_blk[PWMAX];
+
+static void make_eyes(void)
+{
+	short tall = gl_hchar >= 16, r, rows = tall ? 16 : 8, c;
+	for (r = 0; r < rows; r++) {
+		const char *src = eye_art[tall ? r : r * 2 + 1];
+		unsigned short v = 0;
+		for (c = 0; c < 16; c++)
+			v = (v << 1) | (src[c] == '#');
+		eye_open[r] = v;
+		/* crossed out: a diagonal from bottom left to top right */
+		eye_shut[r] = v | (0x8000 >> ((rows - 1 - r) * 16 / rows)) | (0x4000 >> ((rows - 1 - r) * 16 / rows));
+	}
+}
+
+static void pw_update_text(PWFIELD *p)
+{
+	short n = (short)strlen(p->real), i;
+	if (n > p->max)
+		n = p->max;
+	for (i = 0; i < n; i++)
+		p->shown[i] = p->clear ? p->real[i] : '*';
+	p->shown[n] = 0;
+	eye_blk[p - pwf].bi_pdata = p->clear ? eye_shut : eye_open;
+}
+
+/* a password field of len characters on real (which holds len+1) */
+static short d_pass(short x, short y, char *real, short len)
+{
+	PWFIELD *p = &pwf[npw];
+	BITBLK *b = &eye_blk[npw];
+	short f;
+	if (len > 46)
+		len = 46;
+	p->real = real;
+	p->max = len;
+	p->clear = 0;
+	real[len] = 0;
+	pw_update_text(p);
+	f = d_edit(x, y, p->shown, len, 'X');
+	p->obj = f;
+	b->bi_wb = 2;
+	b->bi_hl = gl_hchar >= 16 ? 16 : 8;
+	b->bi_x = b->bi_y = 0;
+	b->bi_color = 1;
+	p->eye = d_add(G_IMAGE, TOUCHEXIT, 0, (long)b, x + len + 1, y, 2, 1);
+	npw++;
+	return f;
+}
+
+static PWFIELD *pw_of(short obj)
+{
+	short i;
+	for (i = 0; i < npw; i++)
+		if (pwf[i].obj == obj)
+			return &pwf[i];
+	return 0;
+}
+
+static void draw_obj(short obj)
+{
+	short x, y;
+	objc_offset(tree, obj, &x, &y);
+	objc_draw(tree, obj, 0, x - 2, y - 2, tree[obj].ob_width + 4, tree[obj].ob_height + 4);
+}
+
+/* type into a password field; 1 if the key was used */
+static int pw_key(PWFIELD *p, short key, short *idx)
+{
+	short scan = KEY_SCAN(key), ascii = KEY_ASCII(key), n = (short)strlen(p->real);
+	if (scan == 0x0e) {			/* Backspace */
+		if (n)
+			p->real[n - 1] = 0;
+	} else if (scan == 0x01 || scan == 0x53) {	/* Esc, Delete: clear */
+		p->real[0] = 0;
+	} else if (scan == 0x4b || scan == 0x4d) {	/* the cursor stays at the end */
+		return 1;
+	} else if (ascii >= 32 && n < p->max) {
+		p->real[n] = (char)ascii;
+		p->real[n + 1] = 0;
+	} else {
+		return ascii >= 32;		/* full */
+	}
+	objc_edit(tree, p->obj, 0, idx, ED_END);
+	pw_update_text(p);
+	draw_obj(p->obj);
+	objc_edit(tree, p->obj, 0, idx, ED_INIT);
+	return 1;
+}
+
+static short first_editable(void)
+{
+	short i;
+	for (i = 1; i < nobj; i++)
+		if (tree[i].ob_flags & EDITABLE)
+			return i;
+	return 0;
+}
+
+/* form_do, with password fields */
+static short form_loop(short start)
+{
+	short next = start ? start : first_editable(), edit = 0, idx = 0, cont = 1;
+	short m[8];
+	EVENT e;
+	while (cont) {
+		if (next && next != edit) {
+			edit = next;
+			next = 0;
+			objc_edit(tree, edit, 0, &idx, ED_INIT);
+		}
+		evnt_multi_(MU_KEYBD | MU_BUTTON, 2, 1, 1, 0, m, &e);
+		if (e.which & MU_KEYBD) {
+			PWFIELD *p = pw_of(edit);
+			short scan = KEY_SCAN(e.kreturn);
+			short nav = scan == 0x1c || scan == 0x72 || scan == 0x0f || scan == 0x48 || scan == 0x50;
+			if (!(p && !nav && pw_key(p, e.kreturn, &idx))) {
+				short kr;
+				cont = form_keybd(tree, edit, next, e.kreturn, &next, &kr);
+				if (kr)
+					objc_edit(tree, edit, kr, &idx, ED_CHAR);
+			}
+		}
+		if (e.which & MU_BUTTON) {
+			short obj = objc_find(tree, 0, 8, e.mx, e.my), i;
+			PWFIELD *eye = 0;
+			for (i = 0; i < npw; i++)
+				if (pwf[i].eye == obj && obj > 0)
+					eye = &pwf[i];
+			if (eye) {
+				/* show or hide the password; the dialog stays */
+				if (edit)
+					objc_edit(tree, edit, 0, &idx, ED_END);
+				eye->clear = !eye->clear;
+				pw_update_text(eye);
+				draw_obj(eye->obj);
+				draw_obj(eye->eye);
+				if (edit)
+					objc_edit(tree, edit, 0, &idx, ED_INIT);
+				evnt_timer_(150);
+			} else if (obj < 0) {
+				next = 0;
+			} else {
+				cont = form_button(tree, obj, e.breturn, &next);
+			}
+		}
+		if (!cont || (next && next != edit))
+			if (edit)
+				objc_edit(tree, edit, 0, &idx, ED_END);
+	}
+	return next;
+}
+
 static short d_do(short edit)
 {
 	short x, y, w, h, r;
 	form_center(tree, &x, &y, &w, &h);
 	wind_update(BEG_UPDATE);
+	wind_update(3);			/* BEG_MCTRL: the dialog owns the mouse */
 	form_dial(FMD_START, x, y, w, h);
 	objc_draw(tree, 0, 8, x, y, w, h);
-	r = form_do(tree, edit) & 0x7fff;
+	r = (npw ? form_loop(edit) : form_do(tree, edit)) & 0x7fff;
 	form_dial(FMD_FINISH, x, y, w, h);
+	wind_update(2);
 	wind_update(END_UPDATE);
 	tree[r].ob_state &= ~SELECTED;
+	npw = 0;
 	return r;
 }
 
@@ -186,11 +390,6 @@ short alert(short def, const char *fmt, ...)
 	return form_alert(def, out);
 }
 
-void dlg_about(void)
-{
-	alert(1, "[1][MAIL 0.1 - e-mail for the|Atari ST, TT and Falcon.||"
-		 "After Troll by Rajah Lone,|with parts of Claude ST.][ OK ]");
-}
 
 /* ---------------- account ---------------- */
 
@@ -249,7 +448,7 @@ int dlg_account(ACCOUNT *a)
 	d_text(2, 9, "User:");
 	f_user = d_edit(17, 9, user, 42, 'X');
 	d_text(2, 10, "Password:");
-	f_pass = d_edit(17, 10, pass, 30, 'X');
+	f_pass = d_pass(17, 10, pass, 30);
 	f_leave = d_check(17, 11, "POP3: leave mail on the server", a->leave);
 
 	d_text(2, 13, "Outgoing (SMTP)");
@@ -260,7 +459,7 @@ int dlg_account(ACCOUNT *a)
 	d_text(2, 15, "User:");
 	f_suser = d_edit(17, 15, suser, 42, 'X');
 	d_text(2, 16, "Password:");
-	f_spass = d_edit(17, 16, spass, 30, 'X');
+	f_spass = d_pass(17, 16, spass, 30);
 	d_text(17, 17, "(empty: as incoming, \"-\": no login)");
 	d_text(2, 18, "Signature:");
 	f_sig = d_edit(13, 18, sig, 46, 'X');
@@ -419,6 +618,12 @@ static short pick(const char *title, const char **items, short n)
 				return first + i;
 		return -1;
 	}
+}
+
+short dlg_pick_list(const char *title, const char **items, short n);
+short dlg_pick_list(const char *title, const char **items, short n)
+{
+	return pick(title, items, n);
 }
 
 FINFO *dlg_pick_folder(ACCOUNT *a, const char *title)

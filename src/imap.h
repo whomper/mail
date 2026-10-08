@@ -66,6 +66,7 @@ int imap_fetch_seq(IMAP *im, const char *seqset, const char *items,
 /* message and unseen counts of a mailbox without selecting it */
 int imap_status(IMAP *im, const char *mbox, long *messages, long *unseen);
 int imap_store(IMAP *im, const char *uidset, int add, unsigned short flags);
+int imap_store_seq(IMAP *im, const char *seqset, int add, unsigned short flags);
 int imap_copy(IMAP *im, const char *uidset, const char *dest);
 int imap_move(IMAP *im, const char *uidset, const char *dest);	/* MOVE or COPY+delete */
 int imap_expunge(IMAP *im, const char *uidset);

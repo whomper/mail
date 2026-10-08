@@ -22,7 +22,7 @@ LDFLAGS := -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,atari/link
 
 CORE    := util charset mime conn imap pop3 smtp store compose mail futil bidi
 ATARI   := libc tos plat_tos net_tos sting gem
-UI      := main draw win folders list reader editor dialogs
+UI      := main draw win folders list reader editor dialogs popup font about
 
 OBJDIR  := build
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/sting_s.o $(OBJDIR)/nf.o \

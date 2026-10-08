@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include "ui.h"
 #include "../src/mail.h"
+#include "../src/compose.h"
 #include "../src/util.h"
 
 ACCOUNT *cur_acct;
@@ -167,6 +168,86 @@ static void click(WIN *w, short mx, short my, short clicks, short kstate)
 	folders_select(ent[i].a, ent[i].fi);
 }
 
+static void rclick(WIN *w, short mx, short my)
+{
+	long i = w->top + (my - w->work.y) / ch;
+	ACCOUNT *a;
+	FINFO *fi;
+	short r;
+	if (i < 0 || i >= nent)
+		return;
+	a = ent[i].a;
+	fi = ent[i].fi;
+	if (!fi) {
+		const char *lab[] = { "Check mail", "New message", "Edit account...", "-", "Refresh folder list" };
+		r = popup(mx, my, lab, 5);
+		if (r == 0) {
+			long n;
+			busy(1);
+			mail_err[0] = 0;
+			if (!mail_check(a, &n) && mail_err[0])
+				alert(1, "[1][%s][ OK ]", mail_err);
+			busy(0);
+			folders_build();
+		} else if (r == 1) {
+			editor_open(a, compose_new(a, ""), 0, 0);
+		} else if (r == 2) {
+			cmd_edit_account(a);
+		} else if (r == 4) {
+			cmd_refresh_folders(a);
+		}
+		return;
+	}
+	{
+		const char *lab[6];
+		int imap = !fi->local, can_delete = imap && !fi->role && !fi->noselect;
+		lab[0] = fi->noselect ? "~Open" : "Open";
+		lab[1] = imap && !fi->noselect ? "Check for new mail" : "~Check for new mail";
+		lab[2] = fi->noselect ? "~Mark all as read" : "Mark all as read";
+		lab[3] = "-";
+		lab[4] = a->pop ? "~New folder..." : "New folder...";
+		lab[5] = can_delete ? "Delete folder..." : "~Delete folder...";
+		r = popup(mx, my, lab, 6);
+		switch (r) {
+		case 0:
+			folders_select(a, fi);
+			break;
+		case 1:
+			if (fi == cur_finfo) {
+				folders_select(a, fi);	/* opening checks it */
+			} else {
+				long n;
+				busy(1);
+				mail_err[0] = 0;
+				if (!mail_sync_folder(a, fi, &n) && mail_err[0])
+					alert(1, "[1][%s][ OK ]", mail_err);
+				busy(0);
+				folders_build();
+			}
+			break;
+		case 2:
+			busy(1);
+			mail_err[0] = 0;
+			if (!mail_mark_all_read(a, fi) && mail_err[0])
+				alert(1, "[1][%s][ OK ]", mail_err);
+			busy(0);
+			if (fi == cur_finfo && cur_folder) {
+				fold_close(cur_folder);
+				cur_folder = fold_open(a, fi);
+				list_refresh();
+			}
+			folders_build();
+			break;
+		case 4:
+			cmd_new_folder(a);
+			break;
+		case 5:
+			cmd_delete_folder(a, fi);
+			break;
+		}
+	}
+}
+
 static int key(WIN *w, short kstate, short k)
 {
 	short scan = KEY_SCAN(k);
@@ -192,6 +273,7 @@ void folders_init(void)
 	w_folders.pane = 1;
 	w_folders.draw = draw;
 	w_folders.click = click;
+	w_folders.rclick = rclick;
 	w_folders.key = key;
 	strcpy(w_folders.title, "Folders");
 }
