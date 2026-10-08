@@ -724,7 +724,6 @@ int main(void)
 	char dir[200];
 	EVENT ev;
 
-	pf_debug("MAIL: start");
 	ap_id = appl_init();
 	if (ap_id < 0)
 		return 1;
@@ -738,16 +737,12 @@ int main(void)
 	vst_alignment(vdi_h, 0, 5);
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	graf_mouse(BUSYBEE, 0);
-	pf_debug("MAIL: vdi ok");
 
 	work_dir(dir, sizeof(dir));
-	pf_debug(dir);
 	store_init(dir);
-	pf_debug("MAIL: store ok");
 	hebrew_kbd = opt.hebrew;
 	set_logging();
 	net_init();
-	pf_debug("MAIL: net ok");
 	pf_idle = idle;
 	mail_status = status;
 	for (d = 0; d < naccts; d++)
@@ -758,22 +753,17 @@ int main(void)
 	reader_init();
 	editor_init();
 	place_windows();
-	pf_debug("MAIL: windows placed");
 	menu_build();
-	pf_debug("MAIL: menu built");
 	menu_bar(menu, 1);
 	menu_update();
 	graf_mouse(ARROW, 0);
 
-	pf_debug("MAIL: menu shown");
 	folders_build();
-	pf_debug("MAIL: folders built");
 	win_open(&w_folders);
 	win_open(&w_list);
 	win_open(&w_reader);
 	list_load();
 	reader_clear();
-	pf_debug("MAIL: windows open");
 
 	if (!naccts) {
 		alert(1, "[1][Welcome to MAIL!||Let's set up your mail account.][ OK ]");

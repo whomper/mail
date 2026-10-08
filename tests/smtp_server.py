@@ -5,11 +5,18 @@ It speaks EHLO, AUTH PLAIN/LOGIN, MAIL, RCPT, DATA, RSET, QUIT and
 delivers each message into the Dovecot Maildir of a local test user
 (so the test can read it back over IMAP), or into DIR/sink otherwise.
 
-    smtp_server.py PORT DIR USER PASSWORD
+    smtp_server.py PORT DIR USER PASSWORD [CERT KEY]
+
+With CERT and KEY it speaks SMTP over TLS from the first byte (port 465
+style), to test the Raspberry Pi gateway.
 """
-import base64, os, socketserver, sys, time
+import base64, os, socketserver, ssl, sys, time
 
 PORT, DIR, USER, PASS = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
+TLS = None
+if len(sys.argv) > 6:
+    TLS = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    TLS.load_cert_chain(sys.argv[5], sys.argv[6])
 
 
 def deliver(rcpt, data):
@@ -26,6 +33,11 @@ def deliver(rcpt, data):
 
 
 class H(socketserver.StreamRequestHandler):
+    def setup(self):
+        if TLS:
+            self.request = TLS.wrap_socket(self.request, server_side=True)
+        super().setup()
+
     def out(self, s):
         self.wfile.write(s.encode() + b"\r\n")
 

@@ -2,6 +2,11 @@
 # Integration test of MAIL's mail core against a real IMAP/POP3 server
 # (Dovecot) and an SMTP server, all on localhost. Needs dovecot-imapd and
 # dovecot-pop3d installed; run with `make itest`.
+#
+# TLS=1 runs the same tests through the Raspberry Pi gateway set-up: the
+# servers only speak TLS (IMAPS, POP3S, SMTP on 465 style) and stunnel,
+# configured like gateway/install.sh does, offers the plain ports MAIL
+# uses. Needs stunnel4 and openssl.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CLI=$ROOT/build/mail-cli
@@ -12,12 +17,61 @@ PASS=0; FAIL=0
 RUN=$(mktemp -d /tmp/tdv.XXXXXX)   # short: Unix socket paths are limited
 mkdir -p "$D"/{state,home/dana/Maildir/{new,cur,tmp},work}
 echo "dana:{PLAIN}secret" > "$D/users"
-sed -e "s|@RUN@|$RUN|g" -e "s|@DIR@|$D|g" -e "s|@IMAP@|$IMAP|" -e "s|@POP3@|$POP3|" \
-    -e "s|@UID@|$(id -u nobody)|" -e "s|@GID@|$(id -g nobody)|" "$ROOT/tests/dovecot.conf.in" > "$D/dovecot.conf"
+if [ -n "${TLS:-}" ]; then
+  # servers on TLS-only ports, stunnel in front as on the Pi
+  openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=localhost \
+    -addext subjectAltName=DNS:localhost -keyout "$D/key.pem" -out "$D/cert.pem" 2>/dev/null
+  chmod 644 "$D/key.pem"
+  S_IMAP=0; S_POP3=0; S_SMTP=$((SMTP + 440))
+  sed -e "s|@RUN@|$RUN|g" -e "s|@DIR@|$D|g" -e "s|@IMAP@|0|" -e "s|@POP3@|0|" \
+      -e "s|@UID@|$(id -u nobody)|" -e "s|@GID@|$(id -g nobody)|" \
+      -e "s|^ssl = no|ssl = yes\nssl_cert = <$D/cert.pem\nssl_key = <$D/key.pem|" \
+      "$ROOT/tests/dovecot.conf.in" > "$D/dovecot.conf"
+  python3 - "$D/dovecot.conf" $((IMAP + 850)) $((POP3 + 885)) <<'PY'
+import sys
+p, imaps, pop3s = sys.argv[1], sys.argv[2], sys.argv[3]
+s = open(p).read()
+s = s.replace("inet_listener imaps {\n    port = 0", "inet_listener imaps {\n    port = " + imaps)
+s = s.replace("inet_listener pop3s {\n    port = 0", "inet_listener pop3s {\n    port = " + pop3s)
+open(p, "w").write(s)
+PY
+  cat > "$D/stunnel.conf" <<CONF
+foreground = yes
+pid =
+sslVersionMin = TLSv1.2
+verifyChain = yes
+CAfile = $D/cert.pem
+[imap]
+client = yes
+accept = 127.0.0.1:$IMAP
+connect = localhost:$((IMAP + 850))
+checkHost = localhost
+[smtp]
+client = yes
+accept = 127.0.0.1:$SMTP
+connect = localhost:$S_SMTP
+checkHost = localhost
+[pop3]
+client = yes
+accept = 127.0.0.1:$POP3
+connect = localhost:$((POP3 + 885))
+checkHost = localhost
+CONF
+  stunnel "$D/stunnel.conf" 2>"$D/stunnel.log" & TUNPID=$!
+else
+  S_SMTP=$SMTP
+  sed -e "s|@RUN@|$RUN|g" -e "s|@DIR@|$D|g" -e "s|@IMAP@|$IMAP|" -e "s|@POP3@|$POP3|" \
+      -e "s|@UID@|$(id -u nobody)|" -e "s|@GID@|$(id -g nobody)|" "$ROOT/tests/dovecot.conf.in" > "$D/dovecot.conf"
+  TUNPID=
+fi
 chmod 755 "$D"
 dovecot -c "$D/dovecot.conf" || { echo "can't start dovecot"; exit 1; }
-python3 "$ROOT/tests/smtp_server.py" $SMTP "$D" dana secret & SMTPPID=$!
-trap 'kill $SMTPPID 2>/dev/null; doveadm -c "$D/dovecot.conf" stop 2>/dev/null; rm -rf "$RUN"; [ -z "${KEEP:-}" ] && rm -rf "$D"' EXIT
+if [ -n "${TLS:-}" ]; then
+  python3 "$ROOT/tests/smtp_server.py" $S_SMTP "$D" dana secret "$D/cert.pem" "$D/key.pem" & SMTPPID=$!
+else
+  python3 "$ROOT/tests/smtp_server.py" $S_SMTP "$D" dana secret & SMTPPID=$!
+fi
+trap 'kill $SMTPPID $TUNPID 2>/dev/null; doveadm -c "$D/dovecot.conf" stop 2>/dev/null; rm -rf "$RUN"; [ -z "${KEEP:-}" ] && rm -rf "$D"' EXIT
 sleep 1
 
 # three messages waiting in the inbox: Hebrew multipart, windows-1255, HTML only
