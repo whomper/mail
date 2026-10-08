@@ -6,6 +6,7 @@
  *   mail-cli DIR check N            check account N (1-based)
  *   mail-cli DIR folders N          list folders
  *   mail-cli DIR sync N FOLDER      mirror one IMAP folder
+ *   mail-cli DIR more N FOLDER      mirror the next page of older messages
  *   mail-cli DIR list N FOLDER      headers in the local index
  *   mail-cli DIR show N FOLDER UID  read a message
  *   mail-cli DIR send N FILE        FILE is editor text in UTF-8
@@ -113,7 +114,23 @@ int main(int argc, char **argv)
 		}
 		if (!mail_sync_folder(a, fi, &n))
 			return fail("sync");
-		printf("synced: %ld total, %ld unread, %ld new\n", fi->total, fi->unread, n);
+		{
+			FOLDER *f = fold_open(a, fi);
+			printf("synced: %ld total, %ld unread, %ld new, %ld loaded\n", fi->total, fi->unread, n,
+			       f ? f->n : 0L);
+			fold_close(f);
+		}
+	} else if (!strcmp(cmd, "more") && a && argc > 4) {
+		FINFO *fi = find_folder(a, argv[4]);
+		long n;
+		FOLDER *f;
+		if (!fi)
+			return 1;
+		if (!mail_load_more(a, fi, &n))
+			return fail("more");
+		f = fold_open(a, fi);
+		printf("added: %ld, loaded %ld of %ld\n", n, f->n, f->exists);
+		fold_close(f);
 	} else if (!strcmp(cmd, "list") && a && argc > 4) {
 		FINFO *fi = find_folder(a, argv[4]);
 		FOLDER *f;

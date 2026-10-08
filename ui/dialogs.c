@@ -310,7 +310,7 @@ int dlg_settings(void)
 	short f_tz, f_check, f_hdrs, f_wrap, f_keep, f_log, f_heb, b_ok, r;
 	snprintf(tz, sizeof(tz), "%d", opt.tz);
 	snprintf(check, sizeof(check), "%d", opt.check);
-	snprintf(hdrs, sizeof(hdrs), "%d", opt.maxhdr);
+	snprintf(hdrs, sizeof(hdrs), "%d", opt.page);
 	snprintf(wrap, sizeof(wrap), "%d", opt.wrap);
 
 	d_begin(52, 15);
@@ -319,7 +319,7 @@ int dlg_settings(void)
 	f_tz = d_edit(40, 3, tz, 5, 'X');
 	d_text(2, 4, "Check mail every N minutes (0: off):");
 	f_check = d_edit(40, 4, check, 3, '9');
-	d_text(2, 5, "Newest headers to keep per folder:");
+	d_text(2, 5, "Messages to load at a time:");
 	f_hdrs = d_edit(40, 5, hdrs, 4, '9');
 	d_text(2, 6, "Wrap my lines at column:");
 	f_wrap = d_edit(40, 6, wrap, 2, '9');
@@ -335,9 +335,11 @@ int dlg_settings(void)
 		return 0;
 	opt.tz = (short)atoi(tz);
 	opt.check = (short)atoi(check);
-	opt.maxhdr = (short)atoi(hdrs);
-	if (opt.maxhdr < 20)
-		opt.maxhdr = 20;
+	opt.page = (short)atoi(hdrs);
+	if (opt.page < 20)
+		opt.page = 20;
+	if (opt.page > 1000)
+		opt.page = 1000;
 	opt.wrap = (short)atoi(wrap);
 	if (opt.wrap < 40 || opt.wrap > 78)
 		opt.wrap = 72;

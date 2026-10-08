@@ -204,6 +204,37 @@ static void uidflags_cb(void *ud, IMAPFETCH *f)
 	u->flags[u->n++] = f->flags;
 }
 
+/* sort the (uid, flags) pairs by uid */
+static void qsort_pairs(UIDLIST *u)
+{
+	long i, j;
+	for (i = 1; i < u->n; i++) {		/* nearly always sorted already */
+		unsigned long uu = u->uid[i];
+		unsigned short ff = u->flags[i];
+		for (j = i; j > 0 && u->uid[j - 1] > uu; j--) {
+			u->uid[j] = u->uid[j - 1];
+			u->flags[j] = u->flags[j - 1];
+		}
+		u->uid[j] = uu;
+		u->flags[j] = ff;
+	}
+}
+
+static long find_uid(UIDLIST *u, unsigned long uid)
+{
+	long lo = 0, hi = u->n - 1;
+	while (lo <= hi) {
+		long mid = (lo + hi) / 2;
+		if (u->uid[mid] == uid)
+			return mid;
+		if (u->uid[mid] < uid)
+			lo = mid + 1;
+		else
+			hi = mid - 1;
+	}
+	return -1;
+}
+
 typedef struct {
 	FOLDER *f;
 	long added, unseen;
@@ -228,76 +259,57 @@ static void header_cb(void *ud, IMAPFETCH *im)
 		c->unseen++;
 }
 
-static int cmp_ul(const void *a, const void *b)
+/* Mirror the newest f->window messages of a folder (opt.page to start
+ * with, more with mail_load_more): their flags, and the headers of the
+ * ones we don't have yet. Older messages stay on the server only, so a
+ * Sent folder with 8000 messages costs no more than one with 100. */
+static int sync_window(ACCOUNT *a, FINFO *fi, FOLDER *f, long *newmsgs)
 {
-	unsigned long x = *(const unsigned long *)a, y = *(const unsigned long *)b;
-	return x < y ? -1 : x > y;
-}
-
-int mail_sync_folder(ACCOUNT *a, FINFO *fi, long *newmsgs)
-{
-	FOLDER *f;
 	UIDLIST u;
 	HDRCTX hc;
-	long i, j, nnew = 0, pos;
+	long i, j, pos, first, n;
 	unsigned long *want;
+	char range[40];
 	int r;
 
-	if (newmsgs)
-		*newmsgs = 0;
-	if (fi->local || fi->noselect)
-		return 1;
-	if (!mail_connect(a))
-		return 0;
 	status("%s: opening %s...", a->name, fi->disp);
 	r = imap_select(a->im, fi->server, 0);
 	if (r <= 0)
 		return imap_failed(a, r);
-	f = fold_open(a, fi);
-	if (!f) {
-		str_copy(mail_err, "out of memory", sizeof(mail_err));
-		return 0;
-	}
 	if (f->uidvalidity != a->im->uidvalidity) {
 		/* the server renumbered the folder: start over */
 		fold_clear(f);
 		f->uidvalidity = a->im->uidvalidity;
 		f->dirty = 1;
 	}
-	if (a->im->exists == 0) {
+	n = (long)a->im->exists;
+	f->exists = n;
+	f->uidnext = a->im->uidnext;
+	f->dirty = 1;
+	if (f->window < opt.page)
+		f->window = opt.page;
+	if (n == 0) {
 		fold_clear(f);
-		f->uidnext = a->im->uidnext;
-		fold_close(f);
-		folders_save(a);
 		return 1;
 	}
 
-	/* every UID and its flags */
+	/* UIDs and flags of the newest `window` messages */
+	first = n > f->window ? n - f->window + 1 : 1;
+	snprintf(range, sizeof(range), "%ld:%ld", first, n);
 	memset(&u, 0, sizeof(u));
-	status("%s: checking %s (%lu messages)...", a->name, fi->disp, a->im->exists);
-	r = imap_fetch(a->im, "1:*", "(UID FLAGS)", uidflags_cb, &u);
+	status("%s: checking %s...", a->name, fi->disp);
+	r = imap_fetch_seq(a->im, range, "(UID FLAGS)", uidflags_cb, &u);
 	if (r <= 0) {
-		fold_close(f);
 		free(u.uid);
 		free(u.flags);
 		return imap_failed(a, r);
 	}
+	qsort_pairs(&u);
 
-	/* drop what was expunged, update flags of the rest */
+	/* drop what was expunged or fell out of the window; update flags */
 	for (i = f->n - 1; i >= 0; i--) {
 		HDR *h = &f->h[i];
-		long lo = 0, hi = u.n - 1, k = -1;
-		while (lo <= hi) {
-			long mid = (lo + hi) / 2;
-			if (u.uid[mid] == h->uid) {
-				k = mid;
-				break;
-			}
-			if (u.uid[mid] < h->uid)
-				lo = mid + 1;
-			else
-				hi = mid - 1;
-		}
+		long k = find_uid(&u, h->uid);
 		if (k < 0) {
 			fold_remove(f, h->uid);
 		} else {
@@ -309,42 +321,87 @@ int mail_sync_folder(ACCOUNT *a, FINFO *fi, long *newmsgs)
 		}
 	}
 
-	/* the newest opt.maxhdr messages we don't have yet */
+	/* headers of the ones we don't have */
 	want = malloc((u.n + 1) * sizeof(unsigned long));
 	j = 0;
-	if (want) {
-		long first = u.n > opt.maxhdr ? u.n - opt.maxhdr : 0;
-		for (i = first; i < u.n; i++)
+	if (want)
+		for (i = 0; i < u.n; i++)
 			if (!fold_get(f, u.uid[i]))
 				want[j++] = u.uid[i];
-		qsort(want, j, sizeof(unsigned long), cmp_ul);
-	}
 	hc.f = f;
 	hc.added = hc.unseen = 0;
-	for (pos = 0; pos < j; ) {
+	r = 1;
+	for (pos = 0; pos < j && r > 0; ) {
 		char set[700];
 		uidset(want, j, &pos, set, sizeof(set), 50);
 		status("%s: %s - headers %ld of %ld", a->name, fi->disp, pos, j);
 		r = imap_fetch(a->im, set,
 			       "(UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE)])",
 			       header_cb, &hc);
-		if (r <= 0)
-			break;
 	}
-	nnew = hc.unseen;
+	if (newmsgs)
+		*newmsgs = hc.unseen;
 	free(want);
 	free(u.uid);
 	free(u.flags);
-	f->uidnext = a->im->uidnext;
-	f->dirty = 1;
-	fold_close(f);
-	folders_save(a);
-	if (newmsgs)
-		*newmsgs = nnew;
 	if (r <= 0)
 		return imap_failed(a, r);
-	status("");
 	return 1;
+}
+
+int mail_sync_folder(ACCOUNT *a, FINFO *fi, long *newmsgs)
+{
+	FOLDER *f;
+	long messages = -1, unseen = -1;
+	int ok;
+
+	if (newmsgs)
+		*newmsgs = 0;
+	if (fi->local || fi->noselect)
+		return 1;
+	if (!mail_connect(a))
+		return 0;
+	/* the folder's real counts, cheaply */
+	if (imap_status(a->im, fi->server, &messages, &unseen) < 0)
+		return imap_failed(a, -1);
+	f = fold_open(a, fi);
+	if (!f) {
+		str_copy(mail_err, "out of memory", sizeof(mail_err));
+		return 0;
+	}
+	ok = sync_window(a, fi, f, newmsgs);
+	if (messages >= 0)
+		fi->total = messages;
+	if (unseen >= 0)
+		fi->unread = unseen;
+	fold_close(f);
+	folders_save(a);
+	if (ok)
+		status("");
+	return ok;
+}
+
+int mail_load_more(ACCOUNT *a, FINFO *fi, long *added)
+{
+	FOLDER *f;
+	long before;
+	int ok;
+	if (added)
+		*added = 0;
+	if (fi->local || !mail_connect(a))
+		return 0;
+	f = fold_open(a, fi);
+	if (!f)
+		return 0;
+	before = f->n;
+	f->window = (f->window > f->n ? f->n : f->window) + opt.page;
+	ok = sync_window(a, fi, f, 0);
+	if (added)
+		*added = f->n - before;
+	fold_close(f);
+	if (ok)
+		status("");
+	return ok;
 }
 
 /* ---------------- POP3 ---------------- */
@@ -536,11 +593,29 @@ int mail_flag(FOLDER *f, HDR *h, unsigned short flags, int add)
 			return imap_failed(f->acct, r);
 	}
 	if (nf != h->flags) {
+		/* IMAP counts come from the server: keep them in step */
+		if (!f->fi->local && ((nf ^ h->flags) & MF_SEEN))
+			f->fi->unread += (nf & MF_SEEN) ? -1 : 1;
+		if (f->fi->unread < 0)
+			f->fi->unread = 0;
 		h->flags = nf;
 		f->dirty = 1;
 		fold_count(f);
 	}
 	return 1;
+}
+
+/* an IMAP message left this folder */
+static void count_gone(FOLDER *f, HDR *h)
+{
+	if (f->fi->local)
+		return;
+	if (f->fi->total > 0)
+		f->fi->total--;
+	if (!(h->flags & MF_SEEN) && f->fi->unread > 0)
+		f->fi->unread--;
+	if (f->exists > 0)
+		f->exists--;
 }
 
 /* copy a local message file into another local folder */
@@ -594,8 +669,9 @@ int mail_delete(FOLDER *f, HDR *h)
 		}
 		if (r <= 0)
 			return imap_failed(a, r);
-		if (trash && !trash->local)
+		if (trash && !trash->local && trash != f->fi)
 			trash->total++;
+		count_gone(f, h);
 	}
 	fold_remove(f, uid);
 	fold_count(f);
@@ -625,6 +701,9 @@ int mail_move(FOLDER *f, HDR *h, FINFO *dest)
 		if (r <= 0)
 			return imap_failed(a, r);
 		dest->total++;
+		if (!(h->flags & MF_SEEN))
+			dest->unread++;
+		count_gone(f, h);
 	}
 	fold_remove(f, uid);
 	fold_count(f);

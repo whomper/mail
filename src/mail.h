@@ -17,6 +17,8 @@ void mail_disconnect_all(void);
 
 int  mail_refresh_folders(ACCOUNT *a);		/* IMAP LIST */
 int  mail_sync_folder(ACCOUNT *a, FINFO *fi, long *newmsgs);
+/* mirror opt.page more (older) messages of an IMAP folder */
+int  mail_load_more(ACCOUNT *a, FINFO *fi, long *added);
 /* inbox (IMAP sync or POP3 download), then send the Outbox */
 int  mail_check(ACCOUNT *a, long *newmsgs);
 

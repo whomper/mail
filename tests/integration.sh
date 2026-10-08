@@ -189,6 +189,36 @@ out=$(run sync 1 INBOX)
 out=$(run list 1 INBOX)
 if grep -q "מכתב" <<<"$out"; then FAIL=$((FAIL+1)); echo "FAIL expunged message still mirrored"; else PASS=$((PASS+1)); echo "ok   expunge by another client mirrored"; fi
 
+# a big folder: only a page of 100 is mirrored, more on request
+python3 - $IMAP <<'PY'
+import imaplib, sys, time
+m = imaplib.IMAP4("127.0.0.1", int(sys.argv[1]))
+m.login("dana", "secret")
+m.create("Big")
+for i in range(1, 251):
+    msg = ("From: robot@example.com\r\nTo: dana@test.local\r\nSubject: Big %03d\r\n"
+           "Date: Mon, 05 Oct 2026 10:%02d:00 +0000\r\n\r\nmessage %d\r\n" % (i, i % 60, i))
+    m.append("Big", "(\\Seen)" if i < 245 else "()", None, msg.encode())
+m.logout()
+PY
+out=$(run sync 1 Big)
+expect "big folder: server count, only 100 mirrored" "synced: 250 total, 6 unread, .* 100 loaded" "$out"
+out=$(run list 1 Big)
+expect "big folder: newest message mirrored" "Big 250" "$out"
+if grep -q "Big 150" <<<"$out"; then FAIL=$((FAIL+1)); echo "FAIL big folder: old message mirrored too early"; else PASS=$((PASS+1)); echo "ok   big folder: older messages stay on the server"; fi
+out=$(run more 1 Big)
+expect "load more: the next 100" "added: 100, loaded 200 of 250" "$out"
+out=$(run more 1 Big)
+expect "load more: the rest" "added: 50, loaded 250 of 250" "$out"
+out=$(run list 1 Big)
+expect "big folder: oldest message now mirrored" "Big 001" "$out"
+out=$(run sync 1 Big)
+expect "resync keeps the loaded window" "250 loaded" "$out"
+U=$(uid_of "$(run list 1 Big)" "Big 250")
+out=$(run show 1 Big "$U")
+out=$(run sync 1 Big)
+expect "reading updates the server's unread count" "synced: 250 total, 5 unread" "$out"
+
 out=$(run clearcache)
 out=$(run show 1 INBOX "$U4")
 expect "body downloaded again after clearing the cache" "שלום דנה," "$out"

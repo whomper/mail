@@ -514,6 +514,43 @@ int imap_fetch(IMAP *im, const char *uidset, const char *items,
 	return run(im, 0, fetch_cb, &fc, "UID FETCH %s %s", uidset, items);
 }
 
+int imap_fetch_seq(IMAP *im, const char *seqset, const char *items,
+		   void (*cb)(void *, IMAPFETCH *), void *ud)
+{
+	FETCHCB fc;
+	fc.cb = cb;
+	fc.ud = ud;
+	return run(im, 0, fetch_cb, &fc, "FETCH %s %s", seqset, items);
+}
+
+typedef struct {
+	long *messages, *unseen;
+} STATUSCB;
+
+static void status_cb(IMAP *im, void *ud, const char *s, long n)
+{
+	STATUSCB *st = ud;
+	const char *p;
+	(void)im;
+	(void)n;
+	if (!str_istarts(s + 2, "STATUS "))
+		return;
+	if ((p = str_istr(s, "MESSAGES ")))
+		*st->messages = strtol(p + 9, 0, 10);
+	if ((p = str_istr(s, "UNSEEN ")))
+		*st->unseen = strtol(p + 7, 0, 10);
+}
+
+int imap_status(IMAP *im, const char *mbox, long *messages, long *unseen)
+{
+	char q[300];
+	STATUSCB st;
+	st.messages = messages;
+	st.unseen = unseen;
+	imap_quote(q, sizeof(q), mbox);
+	return run(im, 0, status_cb, &st, "STATUS %s (MESSAGES UNSEEN)", q);
+}
+
 int imap_store(IMAP *im, const char *uidset, int add, unsigned short flags)
 {
 	char fs[120];

@@ -14,6 +14,8 @@ typedef struct { short x, y, w, h; } GRECT;
 
 typedef struct WIN WIN;
 struct WIN {
+	short pane;			/* 1: a pane of the main window */
+	GRECT box;			/* pane: its whole area, header and scroll bar included */
 	short h;			/* AES handle, -1 when closed */
 	short kind;
 	char title[100];
@@ -27,8 +29,10 @@ struct WIN {
 	void (*draw)(WIN *w, GRECT *clip);
 	void (*click)(WIN *w, short mx, short my, short clicks, short kstate);
 	int  (*key)(WIN *w, short kstate, short key);	/* 1 = handled */
+	void (*rclick)(WIN *w, short mx, short my);	/* right button: context menu */
 	void (*closed)(WIN *w);
 	void (*resized)(WIN *w);
+	void (*scrolled)(WIN *w);
 };
 
 /* screen and font */
@@ -52,6 +56,15 @@ void win_ensure_visible(WIN *w, long line);
 long win_rows(WIN *w);				/* whole lines that fit */
 void win_message(short *msg);			/* WM_* handling */
 WIN *win_topmost(void);
+int  win_mouse(short mx, short my, short button, short clicks, short kstate);
+void win_hover(short mx, short my);
+void win_focus(WIN *w);
+void win_relayout(void);			/* after a font change */
+void win_redraw_all(void);
+extern short main_h;
+void main_open(void);
+void main_close(void);
+void main_status(const char *s);
 
 /* drawing (draw.c) */
 #define TX_BOLD     1

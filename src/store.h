@@ -57,12 +57,16 @@ typedef struct {
 typedef struct {
 	short tz;		/* minutes east of UTC */
 	short check;		/* minutes between automatic checks, 0 = off */
-	short maxhdr;		/* newest headers kept per IMAP folder */
+	short page;		/* messages loaded at a time (more on request) */
 	short keepcache;	/* keep message bodies on disk when quitting */
 	short log;		/* write MAIL.LOG */
 	short hebrew;		/* Hebrew keyboard on at start */
 	short offline;
 	short wrap;		/* compose wrap column */
+	short main_x, main_y, main_w, main_h;	/* main window, 0 = not yet placed */
+	short pane_w, pane_h;	/* folders pane width, message list height (pixels) */
+	short ed_x, ed_y, ed_w, ed_h;		/* the editor window */
+	short font_id, font_pt;	/* text font: VDI font id (1 = system) and size */
 	char workdir[200];
 } OPTIONS;
 
@@ -79,6 +83,8 @@ typedef struct {
 	FINFO *fi;
 	char dir[200];
 	unsigned long uidvalidity, uidnext;
+	long window;		/* IMAP: how many of the newest messages to mirror */
+	long exists;		/* IMAP: messages in the folder on the server */
 	HDR *h;
 	long n, cap;
 	short dirty;
@@ -112,7 +118,7 @@ HDR *fold_get(FOLDER *f, unsigned long uid);
 void fold_remove(FOLDER *f, unsigned long uid);	/* also its cached body */
 void fold_clear(FOLDER *f);
 void hdr_set(HDR *h, const char *from, const char *subject, const char *to);
-void fold_count(FOLDER *f);		/* updates fi->total / unread */
+void fold_count(FOLDER *f);		/* local folders: updates fi->total / unread */
 /* fill a header from the raw header block of a message */
 void hdr_from_raw(HDR *h, const char *raw, long len);
 

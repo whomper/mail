@@ -24,12 +24,27 @@ static void defaults(void)
 {
 	opt.tz = 0;
 	opt.check = 0;
-	opt.maxhdr = 300;
+	opt.page = 100;
 	opt.keepcache = 1;
 	opt.log = 0;
 	opt.hebrew = 0;
 	opt.offline = 0;
 	opt.wrap = 72;
+	opt.font_id = 1;
+	opt.font_pt = 0;	/* the system font at the screen's size */
+}
+
+/* "a,b,c,d" -> up to n shorts */
+static void shorts(const char *v, short *out, int n)
+{
+	int i;
+	for (i = 0; i < n; i++) {
+		char *e;
+		out[i] = (short)strtol(v, &e, 10);
+		if (*e != ',')
+			break;
+		v = e + 1;
+	}
 }
 
 /* \n and \\ escapes keep multi-line values on one line */
@@ -139,12 +154,16 @@ static void set_opt(const char *k, const char *v)
 	short n = (short)atoi(v);
 	if (!strcmp(k, "tz")) opt.tz = n;
 	else if (!strcmp(k, "check")) opt.check = n;
-	else if (!strcmp(k, "headers")) opt.maxhdr = n < 20 ? 20 : n;
+	else if (!strcmp(k, "page")) opt.page = n < 20 ? 20 : n > 1000 ? 1000 : n;
 	else if (!strcmp(k, "keepcache")) opt.keepcache = n;
 	else if (!strcmp(k, "log")) opt.log = n;
 	else if (!strcmp(k, "hebrew")) opt.hebrew = n;
 	else if (!strcmp(k, "offline")) opt.offline = n;
 	else if (!strcmp(k, "wrap")) opt.wrap = n < 40 ? 40 : n > 78 ? 78 : n;
+	else if (!strcmp(k, "main")) shorts(v, &opt.main_x, 4);
+	else if (!strcmp(k, "panes")) shorts(v, &opt.pane_w, 2);
+	else if (!strcmp(k, "editor")) shorts(v, &opt.ed_x, 4);
+	else if (!strcmp(k, "font")) shorts(v, &opt.font_id, 2);
 }
 
 int store_init(const char *workdir)
@@ -207,8 +226,11 @@ int store_save_settings(void)
 	int r;
 	sb_init(&b);
 	sb_adds(&b, "; MAIL settings - see docs/GUIDE.md\r\n[options]\r\n");
-	sb_printf(&b, "tz=%d\r\ncheck=%d\r\nheaders=%d\r\nkeepcache=%d\r\nlog=%d\r\nhebrew=%d\r\noffline=%d\r\nwrap=%d\r\n",
-		  opt.tz, opt.check, opt.maxhdr, opt.keepcache, opt.log, opt.hebrew, opt.offline, opt.wrap);
+	sb_printf(&b, "tz=%d\r\ncheck=%d\r\npage=%d\r\nkeepcache=%d\r\nlog=%d\r\nhebrew=%d\r\noffline=%d\r\nwrap=%d\r\n",
+		  opt.tz, opt.check, opt.page, opt.keepcache, opt.log, opt.hebrew, opt.offline, opt.wrap);
+	sb_printf(&b, "main=%d,%d,%d,%d\r\npanes=%d,%d\r\neditor=%d,%d,%d,%d\r\nfont=%d,%d\r\n",
+		  opt.main_x, opt.main_y, opt.main_w, opt.main_h, opt.pane_w, opt.pane_h,
+		  opt.ed_x, opt.ed_y, opt.ed_w, opt.ed_h, opt.font_id, opt.font_pt);
 	for (i = 0; i < naccts; i++) {
 		ACCOUNT *a = accts[i];
 		sb_adds(&b, "\r\n[account]\r\nname=");
@@ -490,6 +512,10 @@ void fold_clear(FOLDER *f)
 void fold_count(FOLDER *f)
 {
 	long i, u = 0;
+	/* IMAP folders show the server's counts (STATUS), kept up to date by
+	   the operations in mail.c; only a part of them is on disk */
+	if (f->fi && !f->fi->local)
+		return;
 	for (i = 0; i < f->n; i++)
 		if (!(f->h[i].flags & (MF_SEEN | MF_DELETED)))
 			u++;
@@ -523,6 +549,8 @@ FOLDER *fold_open(ACCOUNT *a, FINFO *fi)
 			strtoul(line + 8, &e, 10);
 			f->uidvalidity = strtoul(e, &e, 10);
 			f->uidnext = strtoul(e, &e, 10);
+			f->window = strtol(e, &e, 10);
+			f->exists = strtol(e, &e, 10);
 			continue;
 		}
 		{
@@ -561,7 +589,7 @@ int fold_save(FOLDER *f)
 	long i;
 	int r;
 	sb_init(&b);
-	sb_printf(&b, "MAILIDX 1 %lu %lu\n", f->uidvalidity, f->uidnext);
+	sb_printf(&b, "MAILIDX 2 %lu %lu %ld %ld\n", f->uidvalidity, f->uidnext, f->window, f->exists);
 	for (i = 0; i < f->n; i++) {
 		HDR *h = &f->h[i];
 		sb_printf(&b, "%lu\t%x\t%ld\t%lu\t", h->uid, h->flags, h->size, h->date);

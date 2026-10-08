@@ -185,18 +185,13 @@ static int key(WIN *w, short kstate, short k)
 	return 0;
 }
 
-static void closed(WIN *w)
-{
-	win_close(w);
-}
-
 void folders_init(void);
 void folders_init(void)
 {
 	w_folders.h = -1;
+	w_folders.pane = 1;
 	w_folders.draw = draw;
 	w_folders.click = click;
 	w_folders.key = key;
-	w_folders.closed = closed;
-	strcpy(w_folders.title, " Folders ");
+	strcpy(w_folders.title, "Folders");
 }

@@ -13,6 +13,8 @@
 
 static long *view;		/* indexes into cur_folder->h, newest first */
 static long nview, sel = -1;
+static long shown;		/* local folders: how many of the newest to list */
+static long more;		/* older messages not listed yet (0: no "load more" row) */
 static unsigned long sel_uid;
 
 static int cmp_date(const void *x, const void *y)
@@ -33,16 +35,17 @@ void list_titles(void)
 {
 	char t[100], i[120];
 	if (!cur_folder) {
-		win_title(&w_list, " Messages ");
+		win_title(&w_list, "Messages");
 		win_info(&w_list, "");
 		return;
 	}
-	snprintf(t, sizeof(t), " %s - %s ", cur_finfo->disp, cur_acct->name);
+	snprintf(t, sizeof(t), "%s - %s", cur_finfo->disp, cur_acct->name);
 	win_title(&w_list, t);
 	if (opt.offline)
-		snprintf(i, sizeof(i), " %ld messages, %ld unread  (offline)", cur_folder->n, cur_finfo->unread);
+		snprintf(i, sizeof(i), "%ld unread  (offline)", cur_finfo->unread);
 	else
-		snprintf(i, sizeof(i), " %ld messages, %ld unread", cur_folder->n, cur_finfo->unread);
+		snprintf(i, sizeof(i), "%ld of %ld, %ld unread", cur_folder->n,
+			 cur_finfo->total > cur_folder->n ? cur_finfo->total : cur_folder->n, cur_finfo->unread);
 	win_info(&w_list, i);
 }
 
@@ -60,6 +63,9 @@ void list_refresh(void)
 				view[i] = i;
 			nview = cur_folder->n;
 			qsort(view, nview, sizeof(long), cmp_date);
+			/* a big local folder lists a page at a time too */
+			if (cur_finfo->local && nview > shown)
+				nview = shown;
 			for (i = 0; i < nview; i++)
 				if (cur_folder->h[view[i]].uid == sel_uid)
 					sel = i;
@@ -67,7 +73,16 @@ void list_refresh(void)
 	}
 	if (cur_folder)
 		fold_count(cur_folder);
-	w_list.total = nview;
+	more = 0;
+	if (cur_folder && cur_finfo->local)
+		more = cur_folder->n - nview;
+	else if (cur_folder) {
+		long server = cur_folder->exists ? cur_folder->exists : cur_finfo->total;
+		more = server - cur_folder->n;
+	}
+	if (more < 0)
+		more = 0;
+	w_list.total = nview + (more ? 1 : 0);
 	if (w_list.top > nview)
 		w_list.top = 0;
 	list_titles();
@@ -78,6 +93,7 @@ void list_refresh(void)
 void list_load(void)
 {
 	sel_uid = 0;
+	shown = opt.page;
 	w_list.top = 0;
 	list_refresh();
 }
@@ -175,6 +191,20 @@ static void draw(WIN *w, GRECT *clip)
 		text_at(x0, w->work.y + w->head_h + ch, m, strlen(m), cols, TX_LIGHT);
 		return;
 	}
+	if (more && nview >= w->top && nview < w->top + rows) {
+		/* the last row offers the next page */
+		char t[80];
+		short y = w->work.y + w->head_h + (short)((nview - w->top) * ch);
+		long next = more < opt.page ? more : opt.page;
+		snprintf(t, sizeof(t), "\x02 Load %ld more  (%ld older on %s)", next, more,
+			 cur_finfo->local ? "disk" : "the server");
+		r.x = w->work.x;
+		r.y = y;
+		r.w = w->work.w;
+		r.h = ch;
+		fill(&r, sel == nview ? 1 : 0);
+		text_at(x0 + 3 * cw, y, t, strlen(t), cols - 3, TX_BOLD | (sel == nview ? TX_INVERSE : 0));
+	}
 	for (i = w->top; i < nview && i < w->top + rows; i++) {
 		HDR *h = &cur_folder->h[view[i]];
 		short y = w->work.y + w->head_h + (short)((i - w->top) * ch);
@@ -211,9 +241,44 @@ static void draw(WIN *w, GRECT *clip)
 	}
 }
 
+/* the "load more" row: the next page of older messages */
+static void load_more(void)
+{
+	long added = 0, keep_top = w_list.top;
+	if (!more)
+		return;
+	if (cur_finfo->local) {
+		shown += opt.page;
+	} else if (opt.offline) {
+		alert(1, "[1][MAIL is working offline.|Older messages are on the server.][ OK ]");
+		return;
+	} else {
+		busy(1);
+		mail_err[0] = 0;
+		if (!mail_load_more(cur_acct, cur_finfo, &added) && mail_err[0])
+			alert(1, "[1][%s][ OK ]", mail_err);
+		busy(0);
+		fold_close(cur_folder);
+		cur_folder = fold_open(cur_acct, cur_finfo);
+	}
+	list_refresh();
+	win_scroll_to(&w_list, keep_top);
+	folders_build();
+}
+
 static void select_row(long i, int open)
 {
 	long old = sel;
+	if (i >= nview && more) {
+		/* onto the "load more" row; Return (or a click) loads */
+		sel = nview;
+		win_redraw_lines(&w_list, old, 1);
+		win_redraw_lines(&w_list, sel, 1);
+		win_ensure_visible(&w_list, nview);
+		if (open)
+			load_more();
+		return;
+	}
 	if (i < 0 || i >= nview)
 		return;
 	sel = i;
@@ -226,8 +291,8 @@ static void select_row(long i, int open)
 	win_redraw_lines(&w_list, sel, 1);
 	list_titles();
 	folders_build();
-	if (open && w_reader.h > 0)
-		win_top(&w_reader);
+	if (open)
+		win_focus(&w_reader);
 }
 
 static void click(WIN *w, short mx, short my, short clicks, short kstate)
@@ -238,6 +303,10 @@ static void click(WIN *w, short mx, short my, short clicks, short kstate)
 	if (my < w->work.y + w->head_h)
 		return;
 	i = w->top + (my - w->work.y - w->head_h) / ch;
+	if (i == nview && more) {
+		load_more();
+		return;
+	}
 	select_row(i, clicks > 1);
 }
 
@@ -255,7 +324,7 @@ static int key(WIN *w, short kstate, short k)
 	case 0x47:	/* Clr/Home: first, shift: last */
 		select_row((kstate & 3) ? nview - 1 : 0, 0);
 		return 1;
-	case 0x1c:	/* Return: read it */
+	case 0x1c:	/* Return: read it (or load more, on that row) */
 	case 0x72:
 		select_row(sel < 0 ? 0 : sel, 1);
 		return 1;
@@ -267,9 +336,9 @@ void list_init(void);
 void list_init(void)
 {
 	w_list.h = -1;
+	w_list.pane = 1;
 	w_list.draw = draw;
 	w_list.click = click;
 	w_list.key = key;
-	w_list.head_h = ch + 3;
-	strcpy(w_list.title, " Messages ");
+	strcpy(w_list.title, "Messages");
 }

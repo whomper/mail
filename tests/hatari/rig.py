@@ -137,6 +137,22 @@ class Rig:
         self.xdo("click", "--repeat", "2" if double else "1", "--delay", "120", "1")
         time.sleep(0.3)
 
+    def drag(self, x1, y1, x2, y2, secs=0.6):
+        """press at (x1, y1), move to (x2, y2), release"""
+        self.move(x1, y1)
+        self.xdo("mousedown", "1")
+        time.sleep(0.2)
+        self.move(x2, y2, secs)
+        time.sleep(0.2)
+        self.xdo("mouseup", "1")
+        time.sleep(0.4)
+
+    def rclick(self, x=None, y=None):
+        if x is not None:
+            self.move(x, y)
+        self.xdo("click", "3")
+        time.sleep(0.5)
+
     def stop(self):
         self.proc.terminate()
         try:

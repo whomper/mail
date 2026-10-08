@@ -208,14 +208,9 @@ void menu_update(void)
 
 void status(const char *msg)
 {
-	WIN *w = w_list.h > 0 ? &w_list : &w_folders;
 	char tmp[120];
-	if (!*msg) {
-		list_titles();
-		return;
-	}
 	snprintf(tmp, sizeof(tmp), " %s", msg);
-	win_info(w, tmp);
+	main_status(*msg ? tmp : "");
 }
 
 void busy(int on)
@@ -320,8 +315,8 @@ void cmd_check_all(void)
 		alert(1, "[1][%s][ OK ]", errs);
 	{
 		char m[60];
-		snprintf(m, sizeof(m), total == 1 ? " 1 new message" : " %ld new messages", total);
-		win_info(&w_folders, m);
+		snprintf(m, sizeof(m), total == 1 ? "1 new message" : "%ld new messages", total);
+		status(m);
 	}
 	menu_update();
 }
@@ -526,12 +521,44 @@ static void cmd_delete_folder(void)
 	menu_update();
 }
 
+static void wait_release(void)
+{
+	short mx, my, mb, ks;
+	for (;;) {
+		graf_mkstate(&mx, &my, &mb, &ks);
+		if (!(mb & 3))
+			return;
+		evnt_timer_(10);
+	}
+}
+
+/* the "any button" event can't count clicks: see whether this press
+   follows the last one closely enough to be a double click */
+static short double_click(short mx, short my)
+{
+	static unsigned long last;
+	static short lx, ly;
+	unsigned long now = pf_ms();
+	short n = (now - last < 400 && mx - lx < 4 && lx - mx < 4 && my - ly < 4 && ly - my < 4) ? 2 : 1;
+	last = n == 2 ? 0 : now;
+	lx = mx;
+	ly = my;
+	return n;
+}
+
 static void do_quit(void)
 {
 	if (editor_dirty() &&
 	    alert(2, "[2][You are still writing a message.|Quit anyway?][Quit|Cancel]") != 1)
 		return;
 	quit = 1;
+}
+
+/* closing the main window ends MAIL */
+void main_closed(void);
+void main_closed(void)
+{
+	do_quit();
 }
 
 static void command(short cmd)
@@ -574,7 +601,7 @@ static void command(short cmd)
 	case C_SAVEOUT: editor_send(0); break;
 	case C_ATTACH: editor_attach(); break;
 	case C_ABOOK: editor_insert_address(); break;
-	case C_FOLDERS: win_open(&w_folders); break;
+	case C_FOLDERS: main_open(); break;
 	case C_REFRESH: {
 		short i;
 		char server[160];
@@ -666,6 +693,11 @@ static int shortcut(short kstate, short key)
 			return 1;
 		}
 	}
+	/* Tab moves the keyboard to the next pane */
+	if (scan == 0x0f && top && top->pane) {
+		win_focus(top == &w_folders ? &w_list : top == &w_list ? &w_reader : &w_folders);
+		return 1;
+	}
 	/* Delete removes the message unless the editor has the keyboard */
 	if (scan == 0x53 && top != &w_editor && cur_msg) {
 		command(C_DELETE);
@@ -676,34 +708,18 @@ static int shortcut(short kstate, short key)
 
 static void place_windows(void)
 {
-	short fw = 24 * cw + 2 * cw;
-	if (desk_w >= 600) {
-		w_folders.place.x = desk_x;
-		w_folders.place.y = desk_y;
-		w_folders.place.w = fw;
-		w_folders.place.h = desk_h;
-		w_list.place.x = desk_x + fw;
-		w_list.place.y = desk_y;
-		w_list.place.w = desk_w - fw;
-		w_list.place.h = desk_h * 2 / 5;
-		w_reader.place.x = desk_x + fw;
-		w_reader.place.y = desk_y + w_list.place.h;
-		w_reader.place.w = desk_w - fw;
-		w_reader.place.h = desk_h - w_list.place.h;
-	} else {
-		/* ST low resolution: overlapping windows */
-		w_folders.place.x = desk_x;
-		w_folders.place.y = desk_y;
-		w_folders.place.w = desk_w / 2;
-		w_folders.place.h = desk_h;
-		w_list.place = w_reader.place = w_folders.place;
-		w_list.place.x = w_reader.place.x = desk_x + desk_w / 4;
-		w_list.place.w = w_reader.place.w = desk_w - desk_w / 4;
+	/* the editor where it was last time, if that still fits */
+	w_editor.place.x = opt.ed_x;
+	w_editor.place.y = opt.ed_y;
+	w_editor.place.w = opt.ed_w;
+	w_editor.place.h = opt.ed_h;
+	if (opt.ed_w < 30 * cw || opt.ed_h < 8 * ch || opt.ed_x < 0 || opt.ed_y < desk_y ||
+	    opt.ed_x + opt.ed_w > desk_x + desk_w + 4 || opt.ed_y + opt.ed_h > desk_y + desk_h + 4) {
+		w_editor.place.x = desk_x + desk_w / 10;
+		w_editor.place.y = desk_y + ch;
+		w_editor.place.w = desk_w - desk_w / 5;
+		w_editor.place.h = desk_h - 2 * ch;
 	}
-	w_editor.place.x = desk_x + desk_w / 10;
-	w_editor.place.y = desk_y + ch;
-	w_editor.place.w = desk_w - desk_w / 5;
-	w_editor.place.h = desk_h - 2 * ch;
 }
 
 /* the folder MAIL.PRG was started from */
@@ -758,10 +774,8 @@ int main(void)
 	menu_update();
 	graf_mouse(ARROW, 0);
 
+	main_open();
 	folders_build();
-	win_open(&w_folders);
-	win_open(&w_list);
-	win_open(&w_reader);
 	list_load();
 	reader_clear();
 
@@ -778,9 +792,14 @@ int main(void)
 			folders_select(accts[0], in);
 	}
 	last_check = pf_ms();
+	evnt_set_m1(1, 0, 0, 1, 1);
 
 	while (!quit) {
-		short which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 2, 1, 1, 1000, msg, &ev);
+		/* 0x101/3/0: wake on any button press, left or right */
+		short which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER | MU_M1, 0x101, 3, 0,
+					  1000, msg, &ev);
+		if (which & MU_M1)
+			win_hover(ev.mx, ev.my);
 		if (which & MU_MESAG) {
 			switch (msg[0]) {
 			case MN_SELECTED:
@@ -800,14 +819,13 @@ int main(void)
 				top->key(top, ev.kstate, ev.kreturn);
 		}
 		if (which & MU_BUTTON) {
-			WIN *w = win_find(wind_find(ev.mx, ev.my));
-			if (w && w->click && ev.mx >= w->work.x && ev.my >= w->work.y &&
-			    ev.mx < w->work.x + w->work.w && ev.my < w->work.y + w->work.h) {
-				if (!win_is_top(w) && w == &w_editor)
-					win_top(w);
-				w->click(w, ev.mx, ev.my, ev.breturn, ev.kstate);
+			short h = wind_find(ev.mx, ev.my), t, d;
+			wind_get(0, WF_TOP, &t, &d, &d, &d);
+			if (h > 0 && h != t)	/* a click in a window behind: bring it up too */
+				wind_set(h, WF_TOP, 0, 0, 0, 0);
+			if (win_mouse(ev.mx, ev.my, ev.mbutton, double_click(ev.mx, ev.my), ev.kstate))
 				menu_update();
-			}
+			wait_release();
 		}
 		if ((which & MU_TIMER) && opt.check > 0 && !opt.offline && naccts &&
 		    pf_ms() - last_check > (unsigned long)opt.check * 60000UL)
@@ -823,9 +841,8 @@ int main(void)
 		folders_save(accts[d]);
 	store_save_settings();
 	win_close(&w_editor);
-	win_close(&w_reader);
-	win_close(&w_list);
-	win_close(&w_folders);
+	main_close();
+	store_save_settings();
 	menu_bar(menu, 0);
 	v_clsvwk(vdi_h);
 	appl_exit();

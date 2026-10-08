@@ -51,7 +51,7 @@ void reader_clear(void)
 	body = 0;
 	cur_uid = 0;
 	w_reader.top = 0;
-	win_title(&w_reader, " Message ");
+	win_title(&w_reader, "Message");
 	win_info(&w_reader, "");
 	win_sliders(&w_reader);
 	win_redraw(&w_reader, 0);
@@ -182,17 +182,15 @@ void reader_show(HDR *h)
 	body = expand_tabs(cur_msg->text, cur_msg->textlen, &bodylen);
 	{
 		char t[100];
-		snprintf(t, sizeof(t), " %.90s ", cur_msg->subject[0] ? cur_msg->subject : "(no subject)");
+		snprintf(t, sizeof(t), "%.90s", cur_msg->subject[0] ? cur_msg->subject : "(no subject)");
 		win_title(&w_reader, t);
 		if (cur_msg->html)
-			win_info(&w_reader, " Shown as text (the message is HTML)");
+			win_info(&w_reader, "HTML shown as text");
 		else if (cur_msg->nparts)
-			win_info(&w_reader, " Click an attachment to save it");
+			win_info(&w_reader, "click an attachment to save it");
 		else
 			win_info(&w_reader, "");
 	}
-	if (w_reader.h <= 0)
-		win_open(&w_reader);
 	w_reader.top = 0;
 	layout();
 	win_redraw(&w_reader, 0);
@@ -338,9 +336,10 @@ void reader_init(void);
 void reader_init(void)
 {
 	w_reader.h = -1;
+	w_reader.pane = 1;
 	w_reader.draw = draw;
 	w_reader.click = click;
 	w_reader.key = key;
 	w_reader.resized = resized;
-	strcpy(w_reader.title, " Message ");
+	strcpy(w_reader.title, "Message");
 }
