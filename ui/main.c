@@ -1,0 +1,840 @@
+/*
+ * main.c - MAIL: start-up, the menu bar, the event loop and the
+ * commands behind menus and keys.
+ */
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include "ui.h"
+#include "../src/mail.h"
+#include "../src/compose.h"
+#include "../src/conn.h"
+#include "../src/plat.h"
+#include "../src/util.h"
+
+short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
+short ap_id;
+short hebrew_kbd;
+static short quit;
+static unsigned long last_check;
+
+void folders_init(void);
+void list_init(void);
+void reader_init(void);
+void editor_init(void);
+
+/* ---------------- menu ---------------- */
+
+enum {
+	C_NONE, C_ABOUT,
+	C_NEW, C_CHECK, C_SENDQ, C_SAVEATT, C_QUIT,
+	C_REPLY, C_REPLYALL, C_FORWARD, C_UNREAD, C_FLAG, C_MOVE, C_DELETE,
+	C_SEND, C_SAVEOUT, C_ATTACH, C_ABOOK,
+	C_FOLDERS, C_REFRESH, C_NEWFOLDER, C_DELFOLDER,
+	C_ACCOUNTS, C_SETTINGS, C_OFFLINE, C_HEBREW, C_LOG,
+	C_SEP, C_ACC
+};
+
+typedef struct {
+	const char *text;
+	short cmd;
+} MITEM;
+
+static const MITEM m_desk[] = {
+	{ "  About MAIL...   ", C_ABOUT }, { "--------------------", C_SEP },
+	{ "  Desk Accessory 1  ", C_ACC }, { "  Desk Accessory 2  ", C_ACC },
+	{ "  Desk Accessory 3  ", C_ACC }, { "  Desk Accessory 4  ", C_ACC },
+	{ "  Desk Accessory 5  ", C_ACC }, { "  Desk Accessory 6  ", C_ACC }, { 0, 0 }
+};
+static const MITEM m_file[] = {
+	{ "  New message     ^N ", C_NEW }, { "  Check mail      ^K ", C_CHECK },
+	{ "  Send Outbox        ", C_SENDQ }, { "---------------------", C_SEP },
+	{ "  Save attachment... ", C_SAVEATT }, { "---------------------", C_SEP },
+	{ "  Quit            ^Q ", C_QUIT }, { 0, 0 }
+};
+static const MITEM m_msg[] = {
+	{ "  Reply            ^R ", C_REPLY }, { "  Reply to all     ^E ", C_REPLYALL },
+	{ "  Forward          ^F ", C_FORWARD }, { "----------------------", C_SEP },
+	{ "  Mark as unread   ^U ", C_UNREAD }, { "  Flag             ^G ", C_FLAG },
+	{ "  Move to...       ^M ", C_MOVE }, { "  Delete          Del ", C_DELETE },
+	{ "----------------------", C_SEP },
+	{ "  Send now         ^S ", C_SEND }, { "  Put in Outbox       ", C_SAVEOUT },
+	{ "  Attach file...   ^T ", C_ATTACH }, { "  Address book...  ^B ", C_ABOOK }, { 0, 0 }
+};
+static const MITEM m_fold[] = {
+	{ "  Show folders        ", C_FOLDERS }, { "  Refresh folder list ", C_REFRESH },
+	{ "  New folder...       ", C_NEWFOLDER }, { "  Delete folder...    ", C_DELFOLDER }, { 0, 0 }
+};
+static const MITEM m_opts[] = {
+	{ "  Accounts...         ", C_ACCOUNTS }, { "  Settings...         ", C_SETTINGS },
+	{ "----------------------", C_SEP }, { "  Work offline        ", C_OFFLINE },
+	{ "  Hebrew keyboard F10 ", C_HEBREW }, { "  Protocol log        ", C_LOG }, { 0, 0 }
+};
+
+static const char *titles[] = { " MAIL ", " File ", " Message ", " Folder ", " Options " };
+static const MITEM *drops[] = { m_desk, m_file, m_msg, m_fold, m_opts };
+#define NTITLES 5
+
+#define MMAX 64
+static OBJECT menu[MMAX];
+static short menu_cmd[MMAX];
+
+static short find_item(short cmd)
+{
+	short i;
+	for (i = 0; i < MMAX; i++)
+		if (menu_cmd[i] == cmd)
+			return i;
+	return -1;
+}
+
+static void menu_build(void)
+{
+	short n = 0, t, i, cols = scr_w / cw, x = 0;
+	short first_title, first_drop, screen, prev_drop = -1;
+	memset(menu, 0, sizeof(menu));
+	/* 0 root, 1 bar, 2 active (titles), titles, screen, drops */
+	menu[0].ob_type = G_IBOX;
+	menu[0].ob_next = -1;
+	menu[0].ob_head = 1;
+	menu[0].ob_width = cols;
+	menu[0].ob_height = scr_h / ch;
+	menu[1].ob_type = G_BOX;
+	menu[1].ob_spec = 0x1100L;
+	menu[1].ob_head = menu[1].ob_tail = 2;
+	menu[1].ob_width = cols;
+	menu[1].ob_height = 0x201;
+	menu[2].ob_type = G_IBOX;
+	menu[2].ob_next = 1;
+	menu[2].ob_x = 2;
+	menu[2].ob_height = 0x301;
+	n = 3;
+	first_title = n;
+	for (t = 0; t < NTITLES; t++) {
+		OBJECT *o = &menu[n];
+		o->ob_type = G_TITLE;
+		o->ob_spec = (long)titles[t];
+		o->ob_head = o->ob_tail = -1;
+		o->ob_x = x;
+		o->ob_width = (short)strlen(titles[t]);
+		o->ob_height = 0x301;
+		o->ob_next = t + 1 < NTITLES ? n + 1 : 2;
+		x += o->ob_width;
+		n++;
+	}
+	menu[2].ob_head = first_title;
+	menu[2].ob_tail = n - 1;
+	menu[2].ob_width = x;
+	screen = n++;
+	menu[1].ob_next = screen;
+	menu[0].ob_tail = screen;
+	menu[screen].ob_type = G_IBOX;
+	menu[screen].ob_next = 0;
+	menu[screen].ob_y = 0x301;
+	menu[screen].ob_width = cols;
+	menu[screen].ob_height = 19;
+	first_drop = n;
+	x = 2;
+	for (t = 0; t < NTITLES; t++) {
+		const MITEM *it = drops[t];
+		short d = n++, k = 0, w = 0, dx = x + menu[first_title + t].ob_x;
+		for (i = 0; it[i].text; i++)
+			if ((short)strlen(it[i].text) > w)
+				w = (short)strlen(it[i].text);
+		if (dx + w > cols)
+			dx = cols - w;
+		menu[d].ob_type = G_BOX;
+		menu[d].ob_spec = 0xFF1100L;
+		menu[d].ob_x = t == 0 ? x : dx;
+		menu[d].ob_width = w;
+		menu[d].ob_head = n;
+		if (prev_drop >= 0)
+			menu[prev_drop].ob_next = d;
+		prev_drop = d;
+		for (i = 0; it[i].text; i++, k++) {
+			OBJECT *o = &menu[n];
+			o->ob_type = G_STRING;
+			o->ob_spec = (long)it[i].text;
+			o->ob_head = o->ob_tail = -1;
+			o->ob_y = k;
+			o->ob_width = w;
+			o->ob_height = 1;
+			o->ob_state = it[i].cmd == C_SEP ? DISABLED : 0;
+			o->ob_next = it[i + 1].text ? n + 1 : d;
+			menu_cmd[n] = it[i].cmd;
+			n++;
+		}
+		menu[d].ob_tail = n - 1;
+		menu[d].ob_height = k;
+	}
+	menu[prev_drop].ob_next = screen;
+	menu[screen].ob_head = first_drop;
+	menu[screen].ob_tail = prev_drop;
+	menu[n - 1].ob_flags |= LASTOB;
+	for (i = 0; i < n; i++)
+		rsrc_obfix(menu, i);
+}
+
+static void enable(short cmd, int on)
+{
+	short i = find_item(cmd);
+	if (i >= 0)
+		menu_ienable(menu, i, on ? 1 : 0);
+}
+
+void menu_update(void)
+{
+	int msg = cur_msg != 0, ed = w_editor.h > 0;
+	enable(C_REPLY, msg);
+	enable(C_REPLYALL, msg);
+	enable(C_FORWARD, msg);
+	enable(C_UNREAD, msg);
+	enable(C_FLAG, msg);
+	enable(C_MOVE, msg);
+	enable(C_DELETE, msg);
+	enable(C_SAVEATT, msg && cur_msg->nparts > 0);
+	enable(C_SEND, ed);
+	enable(C_SAVEOUT, ed);
+	enable(C_ATTACH, ed);
+	enable(C_ABOOK, ed);
+	enable(C_NEWFOLDER, cur_acct && !cur_acct->pop);
+	enable(C_DELFOLDER, cur_finfo && !cur_finfo->local && !cur_finfo->role);
+	menu_icheck(menu, find_item(C_OFFLINE), opt.offline);
+	menu_icheck(menu, find_item(C_HEBREW), hebrew_kbd);
+	menu_icheck(menu, find_item(C_LOG), opt.log);
+}
+
+/* ---------------- status and helpers ---------------- */
+
+void status(const char *msg)
+{
+	WIN *w = w_list.h > 0 ? &w_list : &w_folders;
+	char tmp[120];
+	if (!*msg) {
+		list_titles();
+		return;
+	}
+	snprintf(tmp, sizeof(tmp), " %s", msg);
+	win_info(w, tmp);
+}
+
+void busy(int on)
+{
+	graf_mouse(on ? BUSYBEE : ARROW, 0);
+}
+
+/* keep the system breathing while we wait for the network */
+static void idle(void)
+{
+	evnt_timer_(5);
+}
+
+static void set_logging(void)
+{
+	if (opt.log)
+		path_join(conn_logfile, sizeof(conn_logfile), opt.workdir, "MAIL.LOG");
+	else
+		conn_logfile[0] = 0;
+}
+
+/* Israeli SI-1452 layout by key position (scancode 0x10-0x35), giving
+ * Atari character codes; 0 = key not remapped. From Claude ST. */
+static const u8 hebrew_keys[0x36 - 0x10] = {
+	/* 10 q..p */ '/', '\'', 0xD4, 0xD5, 0xC2, 0xCA, 0xC7, 0xD8, 0xDA, 0xD2,
+	/* 1a [ ] ret ctrl */ 0, 0, 0, 0,
+	/* 1e a..' */ 0xD6, 0xC5, 0xC4, 0xCC, 0xD1, 0xCB, 0xC9, 0xCD, 0xD9, 0xDB, ',',
+	/* 29 ` lshift \ */ 0, 0, 0,
+	/* 2c z../ */ 0xC8, 0xD0, 0xC3, 0xC6, 0xCF, 0xCE, 0xD3, 0xD7, 0xDC, '.'
+};
+
+unsigned char key_char(short kstate, short key)
+{
+	short scan = KEY_SCAN(key);
+	unsigned char ascii = KEY_ASCII(key);
+	if (hebrew_kbd && !(kstate & (K_LSHIFT | K_RSHIFT | K_CTRL | K_ALT)) &&
+	    scan >= 0x10 && scan < 0x36 && hebrew_keys[scan - 0x10])
+		ascii = hebrew_keys[scan - 0x10];
+	return ascii;
+}
+
+void set_hebrew_kbd(short on)
+{
+	hebrew_kbd = on;
+	menu_update();
+	if (w_editor.h > 0) {
+		/* the editor shows the keyboard in its info line */
+		char *i = hebrew_kbd ? " Hebrew keyboard (F10)   ^S send   Esc close"
+				     : " ^S send   ^T attach file   F10 Hebrew   Esc close";
+		win_info(&w_editor, i);
+	}
+}
+
+/* folder lists can be rebuilt by the server: find the open one again */
+static void refind_current(const char *server)
+{
+	FOLDER *keep = cur_folder;
+	if (!cur_acct)
+		return;
+	cur_finfo = server[0] ? folder_find(cur_acct, server) : 0;
+	if (keep) {
+		keep->fi = cur_finfo;
+		if (!cur_finfo) {
+			fold_close(keep);
+			cur_folder = 0;
+			reader_clear();
+			list_load();
+		}
+	}
+}
+
+/* ---------------- commands ---------------- */
+
+void cmd_check_all(void)
+{
+	short i;
+	long total = 0;
+	char server[160], errs[200] = "";
+	str_copy(server, cur_finfo ? cur_finfo->server : "", sizeof(server));
+	if (opt.offline) {
+		alert(1, "[1][MAIL is working offline.|Switch it off in the Options|menu to check mail.][ OK ]");
+		return;
+	}
+	busy(1);
+	for (i = 0; i < naccts; i++) {
+		long n = 0;
+		mail_err[0] = 0;
+		if (!mail_check(accts[i], &n) && mail_err[0] && !errs[0])
+			str_copy(errs, mail_err, sizeof(errs));
+		total += n;
+	}
+	busy(0);
+	refind_current(server);
+	folders_build();
+	if (cur_folder && cur_finfo) {
+		fold_close(cur_folder);
+		cur_folder = fold_open(cur_acct, cur_finfo);
+		list_refresh();
+	}
+	last_check = pf_ms();
+	if (errs[0])
+		alert(1, "[1][%s][ OK ]", errs);
+	{
+		char m[60];
+		snprintf(m, sizeof(m), total == 1 ? " 1 new message" : " %ld new messages", total);
+		win_info(&w_folders, m);
+	}
+	menu_update();
+}
+
+static ACCOUNT *account_for_new(void)
+{
+	if (cur_acct)
+		return cur_acct;
+	return dlg_pick_account("Write from which account?");
+}
+
+static void cmd_reply(int all, int forward)
+{
+	ACCOUNT *a = cur_acct;
+	char *text, refs[1100];
+	if (!cur_msg || !a)
+		return;
+	if (forward) {
+		char path[220];
+		msg_path(cur_folder, cur_uid, path, sizeof(path));
+		text = compose_forward(a, cur_msg, pf_exists(path) ? path : 0);
+		editor_open(a, text, 0, 0);
+		return;
+	}
+	text = compose_reply(a, cur_msg, all);
+	snprintf(refs, sizeof(refs), "%s%s%s", cur_msg->references,
+		 cur_msg->references[0] ? " " : "", cur_msg->message_id);
+	abook_add(cur_msg->reply_to[0] ? cur_msg->reply_to : cur_msg->from);
+	editor_open(a, text, cur_msg->message_id, refs);
+}
+
+static void cmd_delete(void)
+{
+	HDR *h;
+	if (!cur_folder || !(h = fold_get(cur_folder, cur_uid)))
+		return;
+	if (cur_finfo->role == FR_TRASH &&
+	    alert(2, "[2][Delete this message|for good?][Delete|Cancel]") != 1)
+		return;
+	busy(1);
+	mail_err[0] = 0;
+	if (!mail_delete(cur_folder, h)) {
+		busy(0);
+		alert(1, "[1][%s][ OK ]", mail_err);
+		return;
+	}
+	busy(0);
+	reader_clear();
+	list_after_remove();
+	menu_update();
+}
+
+static void cmd_move(void)
+{
+	HDR *h;
+	FINFO *dest;
+	char server[160];
+	if (!cur_folder || !(h = fold_get(cur_folder, cur_uid)))
+		return;
+	dest = dlg_pick_folder(cur_acct, "Move the message to");
+	if (!dest)
+		return;
+	str_copy(server, dest->server, sizeof(server));
+	busy(1);
+	mail_err[0] = 0;
+	if (!mail_move(cur_folder, h, dest)) {
+		busy(0);
+		alert(1, "[1][%s][ OK ]", mail_err);
+		return;
+	}
+	busy(0);
+	reader_clear();
+	list_after_remove();
+	menu_update();
+}
+
+static void cmd_flag(unsigned short flag, int add)
+{
+	HDR *h;
+	if (!cur_folder || !(h = fold_get(cur_folder, cur_uid)))
+		return;
+	if (flag == MF_FLAGGED)
+		add = !(h->flags & MF_FLAGGED);
+	busy(1);
+	mail_err[0] = 0;
+	if (!mail_flag(cur_folder, h, flag, add))
+		alert(1, "[1][%s][ OK ]", mail_err);
+	busy(0);
+	list_refresh();
+	folders_build();
+}
+
+static void cmd_save_attachment(void)
+{
+	short i;
+	if (!cur_msg || !cur_msg->nparts)
+		return;
+	if (cur_msg->nparts == 1) {
+		reader_save_attachment(0);
+		return;
+	}
+	for (i = 0; i < cur_msg->nparts; i++) {
+		short b = alert(1, "[2][Save the attachment|%s?][Save|Skip|Stop]", cur_msg->parts[i].name);
+		if (b == 3)
+			break;
+		if (b == 1)
+			reader_save_attachment(i);
+	}
+}
+
+static void cmd_accounts(void)
+{
+	ACCOUNT *a;
+	short r;
+	if (naccts) {
+		short b = alert(1, "[2][Accounts][Edit|New|Cancel]");
+		if (b == 3)
+			return;
+		a = b == 1 ? dlg_pick_account("Which account?") : acct_new();
+	} else {
+		a = acct_new();
+	}
+	if (!a) {
+		if (naccts >= MAXACCT)
+			alert(1, "[1][MAIL has room for %d accounts.][ OK ]", MAXACCT);
+		return;
+	}
+	r = (short)dlg_account(a);
+	if (r < 0 || (r == 0 && !a->host[0])) {
+		/* deleted, or a new account cancelled */
+		if (cur_acct == a) {
+			if (cur_folder)
+				fold_close(cur_folder);
+			cur_folder = 0;
+			cur_finfo = 0;
+			cur_acct = 0;
+			reader_clear();
+			list_load();
+		}
+		acct_delete(a);
+	} else if (r > 0) {
+		mail_disconnect(a);
+		folders_load(a);
+	}
+	store_save_settings();
+	folders_build();
+	menu_update();
+	if (r > 0 && !opt.offline &&
+	    alert(1, "[2][Check this account now?][Check|Later]") == 1) {
+		long n;
+		busy(1);
+		mail_err[0] = 0;
+		if (!mail_check(a, &n) && mail_err[0])
+			alert(1, "[1][%s][ OK ]", mail_err);
+		busy(0);
+		folders_build();
+	}
+}
+
+static void cmd_new_folder(void)
+{
+	char name[48] = "";
+	if (!cur_acct || cur_acct->pop)
+		return;
+	if (!dlg_ask("New folder", "Name:", name, 40))
+		return;
+	{
+		char server[160];
+		str_copy(server, cur_finfo ? cur_finfo->server : "", sizeof(server));
+		busy(1);
+		mail_err[0] = 0;
+		if (!mail_folder_create(cur_acct, name))
+			alert(1, "[1][%s][ OK ]", mail_err);
+		busy(0);
+		refind_current(server);
+	}
+	folders_build();
+}
+
+static void cmd_delete_folder(void)
+{
+	if (!cur_acct || !cur_finfo || cur_finfo->local || cur_finfo->role)
+		return;
+	if (alert(2, "[2][Delete the folder|\"%s\"|and all its messages|on the server?][Delete|Cancel]",
+		  cur_finfo->disp) != 1)
+		return;
+	{
+		FINFO *fi = cur_finfo;
+		if (cur_folder)
+			fold_close(cur_folder);
+		cur_folder = 0;
+		cur_finfo = 0;
+		reader_clear();
+		list_load();
+		busy(1);
+		mail_err[0] = 0;
+		if (!mail_folder_delete(cur_acct, fi))
+			alert(1, "[1][%s][ OK ]", mail_err);
+		busy(0);
+	}
+	folders_build();
+	menu_update();
+}
+
+static void do_quit(void)
+{
+	if (editor_dirty() &&
+	    alert(2, "[2][You are still writing a message.|Quit anyway?][Quit|Cancel]") != 1)
+		return;
+	quit = 1;
+}
+
+static void command(short cmd)
+{
+	switch (cmd) {
+	case C_ABOUT: dlg_about(); break;
+	case C_NEW: {
+		ACCOUNT *a = account_for_new();
+		if (a)
+			editor_open(a, compose_new(a, ""), 0, 0);
+		break;
+	}
+	case C_CHECK: cmd_check_all(); break;
+	case C_SENDQ: {
+		short i;
+		busy(1);
+		for (i = 0; i < naccts; i++) {
+			int sent;
+			mail_err[0] = 0;
+			if (mail_send_outbox(accts[i], &sent) < 0 && mail_err[0]) {
+				busy(0);
+				alert(1, "[1][%s][ OK ]", mail_err);
+				busy(1);
+			}
+		}
+		busy(0);
+		folders_build();
+		break;
+	}
+	case C_SAVEATT: cmd_save_attachment(); break;
+	case C_QUIT: do_quit(); break;
+	case C_REPLY: cmd_reply(0, 0); break;
+	case C_REPLYALL: cmd_reply(1, 0); break;
+	case C_FORWARD: cmd_reply(0, 1); break;
+	case C_UNREAD: cmd_flag(MF_SEEN, 0); break;
+	case C_FLAG: cmd_flag(MF_FLAGGED, 1); break;
+	case C_MOVE: cmd_move(); break;
+	case C_DELETE: cmd_delete(); break;
+	case C_SEND: editor_send(1); break;
+	case C_SAVEOUT: editor_send(0); break;
+	case C_ATTACH: editor_attach(); break;
+	case C_ABOOK: editor_insert_address(); break;
+	case C_FOLDERS: win_open(&w_folders); break;
+	case C_REFRESH: {
+		short i;
+		char server[160];
+		str_copy(server, cur_finfo ? cur_finfo->server : "", sizeof(server));
+		busy(1);
+		for (i = 0; i < naccts; i++) {
+			mail_err[0] = 0;
+			if (!mail_refresh_folders(accts[i]) && mail_err[0]) {
+				busy(0);
+				alert(1, "[1][%s][ OK ]", mail_err);
+				busy(1);
+			}
+		}
+		busy(0);
+		refind_current(server);
+		folders_build();
+		break;
+	}
+	case C_NEWFOLDER: cmd_new_folder(); break;
+	case C_DELFOLDER: cmd_delete_folder(); break;
+	case C_ACCOUNTS: cmd_accounts(); break;
+	case C_SETTINGS:
+		if (dlg_settings()) {
+			set_logging();
+			store_save_settings();
+			if (w_editor.h <= 0)
+				hebrew_kbd = opt.hebrew;
+			list_refresh();
+			win_redraw(&w_reader, 0);
+		}
+		break;
+	case C_OFFLINE:
+		opt.offline = !opt.offline;
+		if (opt.offline)
+			mail_disconnect_all();
+		store_save_settings();
+		list_titles();
+		break;
+	case C_HEBREW: set_hebrew_kbd(!hebrew_kbd); break;
+	case C_LOG:
+		opt.log = !opt.log;
+		set_logging();
+		store_save_settings();
+		break;
+	}
+	menu_update();
+}
+
+/* ---------------- events ---------------- */
+
+static int shortcut(short kstate, short key)
+{
+	short scan = KEY_SCAN(key);
+	WIN *top = win_topmost();
+	if (scan == 0x44) {		/* F10 */
+		set_hebrew_kbd(!hebrew_kbd);
+		return 1;
+	}
+	if (scan == 0x62) {		/* Help */
+		alert(1, "[1][^N new  ^K check mail  ^R reply|^E reply all  ^F forward  ^U unread|"
+			 "^G flag  ^M move  Del delete|^S send  ^T attach  ^B addresses|F10 Hebrew keyboard  ^Q quit][ OK ]");
+		return 1;
+	}
+	if (kstate & K_CTRL) {
+		short cmd = C_NONE;
+		switch (scan) {
+		case 0x31: cmd = C_NEW; break;		/* N */
+		case 0x25: cmd = C_CHECK; break;	/* K */
+		case 0x10: cmd = C_QUIT; break;		/* Q */
+		case 0x13: cmd = C_REPLY; break;	/* R */
+		case 0x12: cmd = C_REPLYALL; break;	/* E */
+		case 0x21: cmd = C_FORWARD; break;	/* F */
+		case 0x16: cmd = C_UNREAD; break;	/* U */
+		case 0x22: cmd = C_FLAG; break;		/* G */
+		case 0x32: cmd = C_MOVE; break;		/* M */
+		case 0x1f: cmd = C_SEND; break;		/* S */
+		case 0x14: cmd = C_ATTACH; break;	/* T */
+		case 0x30: cmd = C_ABOOK; break;	/* B */
+		}
+		if (cmd == C_SEND || cmd == C_ATTACH || cmd == C_ABOOK) {
+			if (w_editor.h <= 0)
+				return 1;
+		} else if ((cmd == C_REPLY || cmd == C_REPLYALL || cmd == C_FORWARD || cmd == C_UNREAD ||
+			    cmd == C_FLAG || cmd == C_MOVE) && !cur_msg) {
+			return 1;
+		}
+		if (cmd != C_NONE) {
+			command(cmd);
+			return 1;
+		}
+	}
+	/* Delete removes the message unless the editor has the keyboard */
+	if (scan == 0x53 && top != &w_editor && cur_msg) {
+		command(C_DELETE);
+		return 1;
+	}
+	return 0;
+}
+
+static void place_windows(void)
+{
+	short fw = 24 * cw + 2 * cw;
+	if (desk_w >= 600) {
+		w_folders.place.x = desk_x;
+		w_folders.place.y = desk_y;
+		w_folders.place.w = fw;
+		w_folders.place.h = desk_h;
+		w_list.place.x = desk_x + fw;
+		w_list.place.y = desk_y;
+		w_list.place.w = desk_w - fw;
+		w_list.place.h = desk_h * 2 / 5;
+		w_reader.place.x = desk_x + fw;
+		w_reader.place.y = desk_y + w_list.place.h;
+		w_reader.place.w = desk_w - fw;
+		w_reader.place.h = desk_h - w_list.place.h;
+	} else {
+		/* ST low resolution: overlapping windows */
+		w_folders.place.x = desk_x;
+		w_folders.place.y = desk_y;
+		w_folders.place.w = desk_w / 2;
+		w_folders.place.h = desk_h;
+		w_list.place = w_reader.place = w_folders.place;
+		w_list.place.x = w_reader.place.x = desk_x + desk_w / 4;
+		w_list.place.w = w_reader.place.w = desk_w - desk_w / 4;
+	}
+	w_editor.place.x = desk_x + desk_w / 10;
+	w_editor.place.y = desk_y + ch;
+	w_editor.place.w = desk_w - desk_w / 5;
+	w_editor.place.h = desk_h - 2 * ch;
+}
+
+/* the folder MAIL.PRG was started from */
+static void work_dir(char *out, int size)
+{
+	char path[160];
+	short drv = (short)Dgetdrv();
+	path[0] = 0;
+	Dgetpath(path, 0);
+	snprintf(out, size, "%c:%s", 'A' + drv, path);
+	if (out[strlen(out) - 1] == '\\')
+		out[strlen(out) - 1] = 0;
+}
+
+int main(void)
+{
+	short work_in_dummy, work_out[57], msg[8], d;
+	char dir[200];
+	EVENT ev;
+
+	pf_debug("MAIL: start");
+	ap_id = appl_init();
+	if (ap_id < 0)
+		return 1;
+	vdi_h = graf_handle(&cw, &ch, &d, &d);
+	(void)work_in_dummy;
+	vdi_h = v_opnvwk_(vdi_h, work_out);
+	scr_w = work_out[0] + 1;
+	scr_h = work_out[1] + 1;
+	vq_extnd(vdi_h, 1, work_out);
+	planes = work_out[4];
+	vst_alignment(vdi_h, 0, 5);
+	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
+	graf_mouse(BUSYBEE, 0);
+	pf_debug("MAIL: vdi ok");
+
+	work_dir(dir, sizeof(dir));
+	pf_debug(dir);
+	store_init(dir);
+	pf_debug("MAIL: store ok");
+	hebrew_kbd = opt.hebrew;
+	set_logging();
+	net_init();
+	pf_debug("MAIL: net ok");
+	pf_idle = idle;
+	mail_status = status;
+	for (d = 0; d < naccts; d++)
+		folders_load(accts[d]);
+
+	folders_init();
+	list_init();
+	reader_init();
+	editor_init();
+	place_windows();
+	pf_debug("MAIL: windows placed");
+	menu_build();
+	pf_debug("MAIL: menu built");
+	menu_bar(menu, 1);
+	menu_update();
+	graf_mouse(ARROW, 0);
+
+	pf_debug("MAIL: menu shown");
+	folders_build();
+	pf_debug("MAIL: folders built");
+	win_open(&w_folders);
+	win_open(&w_list);
+	win_open(&w_reader);
+	list_load();
+	reader_clear();
+	pf_debug("MAIL: windows open");
+
+	if (!naccts) {
+		alert(1, "[1][Welcome to MAIL!||Let's set up your mail account.][ OK ]");
+		cmd_accounts();
+	} else {
+		/* open the first inbox, as it was last time */
+		FINFO *in = folder_role(accts[0], FR_INBOX);
+		if (in)
+			folders_select(accts[0], in);
+	}
+	last_check = pf_ms();
+
+	while (!quit) {
+		short which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 2, 1, 1, 1000, msg, &ev);
+		if (which & MU_MESAG) {
+			switch (msg[0]) {
+			case MN_SELECTED:
+				command(menu_cmd[msg[4]]);
+				menu_tnormal(menu, msg[3], 1);
+				break;
+			case AP_TERM:
+				quit = 1;
+				break;
+			default:
+				win_message(msg);
+			}
+		}
+		if (which & MU_KEYBD) {
+			WIN *top = win_topmost();
+			if (!shortcut(ev.kstate, ev.kreturn) && top && top->key)
+				top->key(top, ev.kstate, ev.kreturn);
+		}
+		if (which & MU_BUTTON) {
+			WIN *w = win_find(wind_find(ev.mx, ev.my));
+			if (w && w->click && ev.mx >= w->work.x && ev.my >= w->work.y &&
+			    ev.mx < w->work.x + w->work.w && ev.my < w->work.y + w->work.h) {
+				if (!win_is_top(w) && w == &w_editor)
+					win_top(w);
+				w->click(w, ev.mx, ev.my, ev.breturn, ev.kstate);
+				menu_update();
+			}
+		}
+		if ((which & MU_TIMER) && opt.check > 0 && !opt.offline && naccts &&
+		    pf_ms() - last_check > (unsigned long)opt.check * 60000UL)
+			cmd_check_all();
+	}
+
+	mail_disconnect_all();
+	if (cur_folder)
+		fold_close(cur_folder);
+	if (!opt.keepcache)
+		cache_clear_all();
+	for (d = 0; d < naccts; d++)
+		folders_save(accts[d]);
+	store_save_settings();
+	win_close(&w_editor);
+	win_close(&w_reader);
+	win_close(&w_list);
+	win_close(&w_folders);
+	menu_bar(menu, 0);
+	v_clsvwk(vdi_h);
+	appl_exit();
+	return 0;
+}

@@ -1,0 +1,29 @@
+From: =?UTF-8?B?15PXoNeU?= <dana@example.com>
+To: dana@test.local
+Subject: =?UTF-8?B?16nXnNeV150=?= from Tel Aviv
+Date: Thu, 08 Oct 2026 18:30:00 +0300
+Message-ID: <hebrew-1@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="XX"
+
+preamble
+--XX
+Content-Type: multipart/alternative; boundary=YY
+
+--YY
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: base64
+
+16nXnNeV150gMTk5MArXnteUINeg16nXnteiPwo=
+--YY
+Content-Type: text/html; charset=utf-8
+
+<p>HTML version</p>
+--YY--
+--XX
+Content-Type: image/png; name="pic.png"
+Content-Disposition: attachment; filename*=utf-8''%D7%AA.png
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgo=
+--XX--

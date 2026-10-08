@@ -1,0 +1,56 @@
+# Dovecot for MAIL's integration tests (plain text on localhost only).
+base_dir = @RUN@
+state_dir = @DIR@/state
+log_path = @DIR@/dovecot.log
+protocols = imap pop3
+listen = 127.0.0.1
+ssl = no
+disable_plaintext_auth = no
+auth_mechanisms = plain login
+first_valid_uid = 0
+mail_location = maildir:~/Maildir
+default_internal_user = dovecot
+default_login_user = dovenull
+passdb {
+  driver = passwd-file
+  args = scheme=PLAIN username_format=%u @DIR@/users
+}
+userdb {
+  driver = static
+  args = uid=@UID@ gid=@GID@ home=@DIR@/home/%u
+}
+service imap-login {
+  inet_listener imap {
+    port = @IMAP@
+  }
+  inet_listener imaps {
+    port = 0
+  }
+}
+service pop3-login {
+  inet_listener pop3 {
+    port = @POP3@
+  }
+  inet_listener pop3s {
+    port = 0
+  }
+}
+namespace inbox {
+  inbox = yes
+  separator = /
+  mailbox Sent {
+    special_use = \Sent
+    auto = subscribe
+  }
+  mailbox Trash {
+    special_use = \Trash
+    auto = subscribe
+  }
+  mailbox Drafts {
+    special_use = \Drafts
+    auto = subscribe
+  }
+}
+protocol imap {
+  imap_capability = +MOVE
+}

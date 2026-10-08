@@ -1,0 +1,183 @@
+/*
+ * conn.c - buffered TCP connection on top of plat.h's net_*.
+ */
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include "plat.h"
+#include "conn.h"
+
+char conn_logfile[200];
+long conn_bytes;
+
+void conn_log(const char *who, const char *dir, const char *text, long n)
+{
+	int h;
+	if (!conn_logfile[0])
+		return;
+	h = pf_open(conn_logfile, PF_APPEND);
+	if (h < 0)
+		return;
+	pf_write(h, who, strlen(who));
+	pf_write(h, dir, strlen(dir));
+	if (n > 400) {
+		char tmp[40];
+		pf_write(h, text, 200);
+		snprintf(tmp, sizeof(tmp), " [... %ld bytes]", n);
+		pf_write(h, tmp, strlen(tmp));
+	} else {
+		pf_write(h, text, n);
+	}
+	pf_write(h, "\r\n", 2);
+	pf_close(h);
+}
+
+CONN *conn_open(const char *name, const char *host, unsigned short port, char *err, int errlen)
+{
+	CONN *c;
+	int h;
+	char msg[200];
+	snprintf(msg, sizeof(msg), "connecting to %s:%u", host, port);
+	conn_log(name, " -- ", msg, strlen(msg));
+	h = net_open(host, port, err, errlen);
+	if (h < 0) {
+		conn_log(name, " !! ", err, strlen(err));
+		return 0;
+	}
+	c = calloc(1, sizeof(CONN));
+	if (!c) {
+		net_close(h);
+		str_copy(err, "out of memory", errlen);
+		return 0;
+	}
+	c->h = h;
+	c->timeout_ms = 60000;
+	c->name = name;
+	return c;
+}
+
+void conn_close(CONN *c)
+{
+	if (!c)
+		return;
+	conn_log(c->name, " -- ", "closed", 6);
+	net_close(c->h);
+	free(c);
+}
+
+int conn_write(CONN *c, const char *data, long n)
+{
+	if (net_write(c->h, data, n) != n) {
+		str_copy(c->err, "connection lost while sending", sizeof(c->err));
+		return 0;
+	}
+	return 1;
+}
+
+int conn_cmd(CONN *c, int secret, const char *fmt, ...)
+{
+	va_list ap;
+	SBUF b;
+	char tmp[1024];
+	int n, ok;
+	va_start(ap, fmt);
+	n = vsnprintf(tmp, sizeof(tmp) - 2, fmt, ap);
+	va_end(ap);
+	if (n > (int)sizeof(tmp) - 3)
+		n = sizeof(tmp) - 3;
+	if (secret) {
+		/* log the command word(s) only */
+		char *sp = strchr(tmp, ' ');
+		long keep = sp ? sp - tmp : n;
+		if (sp && secret > 1) {
+			char *sp2 = strchr(sp + 1, ' ');
+			if (sp2)
+				keep = sp2 - tmp;
+		}
+		sb_init(&b);
+		sb_add(&b, tmp, keep);
+		sb_adds(&b, " ********");
+		conn_log(c->name, " >> ", b.s, b.len);
+		sb_free(&b);
+	} else {
+		conn_log(c->name, " >> ", tmp, n);
+	}
+	tmp[n++] = '\r';
+	tmp[n++] = '\n';
+	ok = conn_write(c, tmp, n);
+	return ok;
+}
+
+/* make sure there is buffered data; 0 on timeout or close */
+static int fill(CONN *c)
+{
+	unsigned long start = pf_ms();
+	if (c->pos < c->len)
+		return 1;
+	c->pos = c->len = 0;
+	for (;;) {
+		long r = net_read(c->h, c->buf, sizeof(c->buf));
+		if (r > 0) {
+			c->len = r;
+			conn_bytes += r;
+			return 1;
+		}
+		if (r < 0) {
+			str_copy(c->err, "the server closed the connection", sizeof(c->err));
+			return 0;
+		}
+		if (pf_ms() - start > (unsigned long)c->timeout_ms) {
+			str_copy(c->err, "timed out waiting for the server", sizeof(c->err));
+			return 0;
+		}
+		if (pf_idle)
+			pf_idle();
+	}
+}
+
+long conn_getline(CONN *c, SBUF *b)
+{
+	sb_reset(b);
+	for (;;) {
+		char *nl;
+		long n;
+		if (!fill(c))
+			return -1;
+		nl = memchr(c->buf + c->pos, '\n', c->len - c->pos);
+		n = nl ? nl - (c->buf + c->pos) : c->len - c->pos;
+		if (!sb_add(b, c->buf + c->pos, n)) {
+			str_copy(c->err, "out of memory", sizeof(c->err));
+			return -1;
+		}
+		c->pos += n;
+		if (nl) {
+			c->pos++;
+			if (b->len && b->s[b->len - 1] == '\r')
+				b->s[--b->len] = 0;
+			if (!b->s)
+				sb_add(b, "", 0);
+			conn_log(c->name, " << ", b->s, b->len);
+			return b->len;
+		}
+	}
+}
+
+int conn_getbytes(CONN *c, SBUF *b, long n)
+{
+	while (n > 0) {
+		long k;
+		if (!fill(c))
+			return 0;
+		k = c->len - c->pos;
+		if (k > n)
+			k = n;
+		if (!sb_add(b, c->buf + c->pos, k)) {
+			str_copy(c->err, "out of memory", sizeof(c->err));
+			return 0;
+		}
+		c->pos += k;
+		n -= k;
+	}
+	return 1;
+}

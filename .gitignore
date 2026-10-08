@@ -1,0 +1,4 @@
+build/
+MAIL.PRG
+__pycache__/
+*.pyc

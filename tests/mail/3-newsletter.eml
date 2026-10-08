@@ -1,0 +1,12 @@
+From: "Atari News" <news@example.com>
+To: dana@test.local
+Subject: Newsletter October
+Date: Tue, 06 Oct 2026 12:00:00 +0000
+Message-ID: <news@example.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset=iso-8859-1
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><style>body{color:red}</style></head><body>
+<h1>Hello Atari fans</h1><p>This month: caf=E9 &amp; computers.</p>
+<ul><li>Falcon030</li><li>TT030</li></ul></body></html>
