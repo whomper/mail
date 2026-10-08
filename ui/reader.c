@@ -213,8 +213,11 @@ static void draw(WIN *w, GRECT *clip)
 		switch (l->kind) {
 		case L_HEAD:
 			if (l->label) {
+				short v = l->label;
+				if (v < l->n && l->s[v] == ' ')
+					v++;
 				text_at(x0, y, l->s, l->label, cols, TX_BOLD);
-				text_at(x0 + l->label * cw, y, l->s + l->label, l->n - l->label, cols - l->label, 0);
+				text_at(x0 + (l->label + 1) * cw, y, l->s + v, l->n - v, cols - l->label - 1, 0);
 			} else {
 				text_at(x0, y, l->s, l->n, cols, 0);
 			}

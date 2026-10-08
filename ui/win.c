@@ -5,6 +5,7 @@
 #include <string.h>
 #include "ui.h"
 #include "../src/util.h"
+#include "../src/bidi.h"
 
 WIN w_folders, w_list, w_reader, w_editor;
 static WIN *all[] = { &w_folders, &w_list, &w_reader, &w_editor };
@@ -65,18 +66,36 @@ void win_sliders(WIN *w)
 	wind_set(w->h, WF_VSLIDE, (short)pos, 0, 0, 0);
 }
 
+/* GEM draws titles as stored: lay Hebrew out right to left first */
+static void visual(char *dst, const char *src, int size)
+{
+	short n = (short)strlen(src);
+	if (n >= size)
+		n = size - 1;
+	if (n > BIDI_MAX)
+		n = BIDI_MAX;
+	if (bidi_has_rtl(src, n)) {
+		bidi_visual(src, n, 0, dst);
+		dst[n] = 0;
+	} else {
+		str_copy(dst, src, size);
+	}
+}
+
 void win_title(WIN *w, const char *title)
 {
-	str_copy(w->title, title, sizeof(w->title));
+	visual(w->title, title, sizeof(w->title));
 	if (w->h > 0)
 		wind_set_str(w->h, WF_NAME, w->title);
 }
 
 void win_info(WIN *w, const char *info)
 {
-	if (!strcmp(w->info, info))
+	char v[sizeof(w->info)];
+	visual(v, info, sizeof(v));
+	if (!strcmp(w->info, v))
 		return;
-	str_copy(w->info, info, sizeof(w->info));
+	str_copy(w->info, v, sizeof(w->info));
 	if (w->h > 0)
 		wind_set_str(w->h, WF_INFO, w->info);
 }
