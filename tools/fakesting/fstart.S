@@ -1,4 +1,5 @@
 | FAKESTNG.PRG startup: install the fake STinG and stay resident.
+| From Claude ST (whomper/atari_claude).
 	.text
 	.globl	_start
 _start:
@@ -30,3 +31,4 @@ _start:
 	STUB	CNget_block
 	STUB	get_err_text
 	STUB	unsupported
+	STUB	resolve

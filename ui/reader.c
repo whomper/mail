@@ -217,20 +217,30 @@ static void draw(WIN *w, GRECT *clip)
 				if (v < l->n && l->s[v] == ' ')
 					v++;
 				text_at(x0, y, l->s, l->label, cols, TX_BOLD);
-				text_at(x0 + (l->label + 1) * cw, y, l->s + v, l->n - v, cols - l->label - 1, 0);
+				text_at(x0 + (l->label + 1) * cw, y, l->s + v, l->n - v, cols - l->label - 1,
+					/* names and addresses read left to right; a
+					   Hebrew subject is a Hebrew sentence */
+					strncmp(l->s, "Subject:", 8) ? TX_LTR : 0);
 			} else {
-				text_at(x0, y, l->s, l->n, cols, 0);
+				text_at(x0, y, l->s, l->n, cols, TX_LTR);
 			}
 			break;
 		case L_ATTACH: {
-			char t[140], sz[16];
+			/* "» name  (type, size)": the name laid out on its own,
+			   so a Hebrew file name doesn't turn the line around */
+			char t[80], sz[16];
 			MIMEPART *p = &cur_msg->parts[l->attach];
+			short nl = (short)strlen(p->name);
+			if (nl > cols - 4)
+				nl = cols - 4;
 			if (p->size < 1024)
 				snprintf(sz, sizeof(sz), "%ld bytes", p->size);
 			else
 				snprintf(sz, sizeof(sz), "%ld KB", (p->size + 512) / 1024);
-			snprintf(t, sizeof(t), "\xAF %s  (%s, %s)", p->name, p->type, sz);
-			text_at(x0, y, t, strlen(t), cols, TX_BOLD);
+			snprintf(t, sizeof(t), "  (%s, %s)", p->type, sz);
+			text_at(x0, y, "\xAF", 1, cols, TX_BOLD);
+			text_at(x0 + 2 * cw, y, p->name, nl, nl, TX_BOLD);
+			text_at(x0 + (2 + nl) * cw, y, t, strlen(t), cols - 2 - nl, 0);
 			break;
 		}
 		case L_RULE:

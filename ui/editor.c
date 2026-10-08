@@ -166,7 +166,7 @@ void editor_open(ACCOUNT *a, char *text, const char *irt, const char *refs)
 /* visual column of logical column col within s[0..n), laid out the way
    text_at() does it in a field of `cols` (right-aligned when it is a
    Hebrew paragraph and `right` is set) */
-static short visual_col(const char *s, short n, short col, short cols, short right)
+static short visual_col(const char *s, short n, short col, short cols, short right, short ltr)
 {
 	char vis[BIDI_MAX];
 	short pos[BIDI_MAX];
@@ -176,7 +176,7 @@ static short visual_col(const char *s, short n, short col, short cols, short rig
 		m = BIDI_MAX;
 	if (m <= 0 || !bidi_has_rtl(s, m))
 		return col;
-	rtl = bidi_is_rtl(s, m);
+	rtl = ltr ? 0 : bidi_is_rtl(s, m);
 	xoff = (rtl && right) ? cols - m : 0;
 	bidi_visual_map(s, m, rtl, vis, pos, odd);
 	if (col < m)
@@ -202,10 +202,11 @@ static short cursor_col(long line, short col, short cols, short *hoff)
 				v++;
 			if (col < v)
 				return col;
-			return lab + 1 + visual_col(l->s + v, l->n - v, col - v, cols - lab - 1, 0);
+			return lab + 1 + visual_col(l->s + v, l->n - v, col - v, cols - lab - 1, 0,
+						    strncasecmp(l->s, "Subject:", 8) != 0);
 		}
 	}
-	return visual_col(l->s + off, l->n - off, col - off, cols, 1);
+	return visual_col(l->s + off, l->n - off, col - off, cols, 1, 0);
 }
 
 static void draw(WIN *w, GRECT *clip)
@@ -227,7 +228,9 @@ static void draw(WIN *w, GRECT *clip)
 				text_at(x0, y, l->s, lab, cols, TX_BOLD);
 				if (v < l->n && l->s[v] == ' ')
 					v++;
-				text_at(x0 + (lab + 1) * cw, y, l->s + v, l->n - v, cols - lab - 1, 0);
+				/* addresses read left to right; a subject may be Hebrew */
+				text_at(x0 + (lab + 1) * cw, y, l->s + v, l->n - v, cols - lab - 1,
+					strncasecmp(l->s, "Subject:", 8) ? TX_LTR : 0);
 			} else {
 				text_at(x0, y, l->s + hoff, l->n - hoff, cols, 0);
 			}

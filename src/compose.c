@@ -417,7 +417,8 @@ char *compose_reply(ACCOUNT *a, MSG *m, int all)
 	if (!str_istarts(m->subject, "Re:"))
 		sb_adds(&b, "Re: ");
 	sb_adds(&b, m->subject);
-	sb_printf(&b, "\n\nOn %s, %s wrote:\n", m->date, m->from);
+	/* an empty line for the cursor above the quote */
+	sb_printf(&b, "\n\n\n\nOn %s,\n%s wrote:\n", m->date, m->from);
 	quote_text(&b, m->text ? m->text : "");
 	add_signature(&b, a);
 	return sb_steal(&b);

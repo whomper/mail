@@ -779,8 +779,11 @@ int main(void)
 		alert(1, "[1][Welcome to MAIL!||Let's set up your mail account.][ OK ]");
 		cmd_accounts();
 	} else {
-		/* open the first inbox, as it was last time */
-		FINFO *in = folder_role(accts[0], FR_INBOX);
+		/* check mail at start, then open the first inbox */
+		FINFO *in;
+		if (!opt.offline)
+			cmd_check_all();
+		in = folder_role(accts[0], FR_INBOX);
 		if (in)
 			folders_select(accts[0], in);
 	}

@@ -58,6 +58,7 @@ WIN *win_topmost(void);
 #define TX_INVERSE  2
 #define TX_RIGHT    4	/* align right-to-left text to the right edge */
 #define TX_LIGHT    8
+#define TX_LTR     16	/* left-to-right paragraph even when it starts in Hebrew */
 void fill(GRECT *r, short color);
 void clip_on(GRECT *r);
 /* draw up to cols characters of Atari text at x,y (logical order in) */

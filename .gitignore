@@ -2,3 +2,6 @@ build/
 MAIL.PRG
 __pycache__/
 *.pyc
+tools/fakesting/*.o
+tools/fakesting/*.elf
+tools/fakesting/FAKESTNG.PRG

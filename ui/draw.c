@@ -66,7 +66,7 @@ void text_at(short x, short y, const char *s, long n, short cols, short flags)
 	if (n <= 0)
 		return;
 	if (bidi_has_rtl(s, (short)n)) {
-		short rtl = bidi_is_rtl(s, (short)n);
+		short rtl = (flags & TX_LTR) ? 0 : bidi_is_rtl(s, (short)n);
 		bidi_visual(s, (short)n, rtl, vis);
 		out = vis;
 		if (rtl && (flags & TX_RIGHT))
