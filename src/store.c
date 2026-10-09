@@ -219,37 +219,93 @@ int store_init(const char *workdir)
 	return naccts;
 }
 
+/* MAIL.INF explains itself: a ';' line above every setting. MAIL skips
+ * those lines when reading and writes them anew on every save. */
+static void note(SBUF *b, const char *s)
+{
+	sb_adds(b, "; ");
+	sb_adds(b, s);
+	sb_adds(b, "\r\n");
+}
+
 int store_save_settings(void)
 {
 	SBUF b;
 	short i;
 	int r;
 	sb_init(&b);
-	sb_adds(&b, "; MAIL settings - see docs/GUIDE.md\r\n[options]\r\n");
-	sb_printf(&b, "tz=%d\r\ncheck=%d\r\npage=%d\r\nkeepcache=%d\r\nlog=%d\r\nhebrew=%d\r\noffline=%d\r\nwrap=%d\r\n",
-		  opt.tz, opt.check, opt.page, opt.keepcache, opt.log, opt.hebrew, opt.offline, opt.wrap);
-	sb_printf(&b, "main=%d,%d,%d,%d\r\npanes=%d,%d\r\neditor=%d,%d,%d,%d\r\nfont=%d,%d\r\n",
-		  opt.main_x, opt.main_y, opt.main_w, opt.main_h, opt.pane_w, opt.pane_h,
-		  opt.ed_x, opt.ed_y, opt.ed_w, opt.ed_h, opt.font_id, opt.font_pt);
+	sb_adds(&b, "; MAIL settings, written by MAIL.PRG. Lines starting with ; are notes.\r\n"
+		    "; Most of these are set in Options > Settings; see docs/GUIDE.md.\r\n"
+		    "; 1 means on, 0 means off.\r\n\r\n[options]\r\n");
+	note(&b, "your time zone, in minutes east of UTC (Israel: 120 winter, 180 summer)");
+	sb_printf(&b, "tz=%d\r\n", opt.tz);
+	note(&b, "check for new mail every this many minutes; 0 = only when you ask");
+	sb_printf(&b, "check=%d\r\n", opt.check);
+	note(&b, "messages loaded at a time in a folder; \"Load more\" gets the next ones (20-1000)");
+	sb_printf(&b, "page=%d\r\n", opt.page);
+	note(&b, "1 = keep messages you have read on disk after quitting, 0 = only their headers");
+	sb_printf(&b, "keepcache=%d\r\n", opt.keepcache);
+	note(&b, "1 = write the conversation with the servers to MAIL.LOG (passwords hidden)");
+	sb_printf(&b, "log=%d\r\n", opt.log);
+	note(&b, "1 = start with the Hebrew keyboard (F10 switches)");
+	sb_printf(&b, "hebrew=%d\r\n", opt.hebrew);
+	note(&b, "1 = work offline: don't connect, keep new messages in the Outbox");
+	sb_printf(&b, "offline=%d\r\n", opt.offline);
+	note(&b, "the editor wraps lines at this column (40-78)");
+	sb_printf(&b, "wrap=%d\r\n", opt.wrap);
+	note(&b, "main window: x,y,width,height in pixels; 0,0,0,0 = let MAIL place it");
+	sb_printf(&b, "main=%d,%d,%d,%d\r\n", opt.main_x, opt.main_y, opt.main_w, opt.main_h);
+	note(&b, "dividers: folder pane width, message list height, in pixels");
+	sb_printf(&b, "panes=%d,%d\r\n", opt.pane_w, opt.pane_h);
+	note(&b, "editor window: x,y,width,height in pixels; 0,0,0,0 = let MAIL place it");
+	sb_printf(&b, "editor=%d,%d,%d,%d\r\n", opt.ed_x, opt.ed_y, opt.ed_w, opt.ed_h);
+	note(&b, "text font: GDOS font id (1 = system font), size in points");
+	note(&b, "(system font: 0 = normal, 8 = small, 16 = large); set with Options > Font");
+	sb_printf(&b, "font=%d,%d\r\n", opt.font_id, opt.font_pt);
 	for (i = 0; i < naccts; i++) {
 		ACCOUNT *a = accts[i];
-		sb_adds(&b, "\r\n[account]\r\nname=");
+		sb_adds(&b, "\r\n; one [account] part per account, up to 8; Options > Accounts edits them\r\n"
+			    "[account]\r\n");
+		note(&b, "the account's name in the folder list");
+		sb_adds(&b, "name=");
 		escape(&b, a->name);
-		sb_adds(&b, "\r\nfullname=");
+		sb_adds(&b, "\r\n");
+		note(&b, "your name, as people you write to see it");
+		sb_adds(&b, "fullname=");
 		escape(&b, a->fullname);
-		sb_printf(&b, "\r\nemail=%s\r\nin=%s\r\nhost=%s\r\nport=%u\r\nuser=", a->email,
-			  a->pop ? "pop3" : "imap", a->host, a->port);
+		sb_adds(&b, "\r\n");
+		note(&b, "your e-mail address");
+		sb_printf(&b, "email=%s\r\n", a->email);
+		note(&b, "incoming mail: imap (folders stay on the server) or pop3 (mail comes to the Atari)");
+		sb_printf(&b, "in=%s\r\n", a->pop ? "pop3" : "imap");
+		note(&b, "incoming server and port; through the Pi gateway: its IP, 1143 (IMAP) or 1110 (POP3)");
+		sb_printf(&b, "host=%s\r\nport=%u\r\n", a->host, a->port);
+		note(&b, "login for the incoming server");
+		sb_adds(&b, "user=");
 		escape(&b, a->user);
-		sb_adds(&b, "\r\npass=");
+		sb_adds(&b, "\r\n");
+		note(&b, "password, as typed: keep this file to yourself");
+		sb_adds(&b, "pass=");
 		escape(&b, a->pass);
-		sb_printf(&b, "\r\nleave=%d\r\nsmtphost=%s\r\nsmtpport=%u\r\nsmtpuser=", a->leave,
-			  a->smtphost, a->smtpport);
+		sb_adds(&b, "\r\n");
+		note(&b, "POP3 only: 1 = leave mail on the server after downloading it");
+		sb_printf(&b, "leave=%d\r\n", a->leave);
+		note(&b, "outgoing (SMTP) server and port; through the Pi gateway: its IP and 1025");
+		sb_printf(&b, "smtphost=%s\r\nsmtpport=%u\r\n", a->smtphost, a->smtpport);
+		note(&b, "SMTP login: empty = same as incoming, - = the server needs no login");
+		sb_adds(&b, "smtpuser=");
 		escape(&b, a->smtpuser);
-		sb_adds(&b, "\r\nsmtppass=");
+		sb_adds(&b, "\r\n");
+		note(&b, "SMTP password, if the SMTP login differs");
+		sb_adds(&b, "smtppass=");
 		escape(&b, a->smtppass);
-		sb_adds(&b, "\r\nsent=");
+		sb_adds(&b, "\r\n");
+		note(&b, "IMAP folder for copies of sent mail; empty = the server's Sent folder");
+		sb_adds(&b, "sent=");
 		escape(&b, a->sentname);
-		sb_adds(&b, "\r\nsignature=");
+		sb_adds(&b, "\r\n");
+		note(&b, "added below new messages; \\n starts a new line (| in the account dialog)");
+		sb_adds(&b, "signature=");
 		escape(&b, a->signature);
 		sb_adds(&b, "\r\n");
 	}

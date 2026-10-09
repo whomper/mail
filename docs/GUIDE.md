@@ -25,7 +25,7 @@ keeps everything next to itself:
 
 ```
 C:\MAIL\MAIL.PRG      the program
-C:\MAIL\MAIL.INF      settings and accounts
+C:\MAIL\MAIL.INF      settings and accounts (each line has a note above it)
 C:\MAIL\ADDRESS.TXT   address book
 C:\MAIL\MAIL.LOG      protocol log, when switched on
 C:\MAIL\MAIL\         your mail: one folder per account, one per mailbox
