@@ -138,7 +138,7 @@ enum {
 	C_REPLY, C_REPLYALL, C_FORWARD, C_UNREAD, C_MARKREAD, C_FLAG, C_MOVE, C_DELETE,
 	C_SEND, C_SAVEOUT, C_ATTACH, C_ABOOK,
 	C_FOLDERS, C_REFRESH, C_NEWFOLDER, C_DELFOLDER,
-	C_ACCOUNTS, C_SETTINGS, C_FONT, C_OFFLINE, C_HEBREW, C_LOG,
+	C_ACCOUNTS, C_SETTINGS, C_FONT, C_OFFLINE, C_FALCON, C_HEBREW, C_LOG,
 	C_SEP, C_ACC
 };
 void ui_command(short cmd);
@@ -146,6 +146,10 @@ void cmd_new_folder(ACCOUNT *a);
 void cmd_delete_folder(ACCOUNT *a, FINFO *fi);
 void cmd_edit_account(ACCOUNT *a);
 void cmd_refresh_folders(ACCOUNT *a);
+int  falcon_mode_set(int on);		/* 1 if it is now as asked */
+extern short dlg_falcon;		/* the Settings dialog's Falcon mode box */
+void falcon_dsp_init(void);		/* RSA on the DSP in Falcon mode (dsp.c) */
+const char *falcon_dsp_state(void);	/* "DSP" / "68030" for the About box */
 
 /* right-click menus (popup.c): the chosen item, or -1 */
 short popup(short x, short y, const char *const *labels, short n);

@@ -425,18 +425,22 @@ int dlg_account(ACCOUNT *a)
 	str_copy(name, a->name, sizeof(name));
 	str_copy(full, a->fullname, sizeof(full));
 	str_copy(email, a->email, sizeof(email));
-	str_copy(host, a->host, sizeof(host));
-	snprintf(port, sizeof(port), "%u", a->port);
+	if (opt.falcon && !a->dhost[0])
+		acct_preset(a);
+	str_copy(host, opt.falcon ? a->dhost : a->host, sizeof(host));
+	snprintf(port, sizeof(port), "%u", opt.falcon ? acct_port(a, 0) : a->port);
 	str_copy(user, a->user, sizeof(user));
 	str_copy(pass, a->pass, sizeof(pass));
-	str_copy(shost, a->smtphost, sizeof(shost));
-	snprintf(sport, sizeof(sport), "%u", a->smtpport);
+	str_copy(shost, opt.falcon ? a->dsmtphost : a->smtphost, sizeof(shost));
+	snprintf(sport, sizeof(sport), "%u", opt.falcon ? acct_port(a, 1) : a->smtpport);
 	str_copy(suser, a->smtpuser, sizeof(suser));
 	str_copy(spass, a->smtppass, sizeof(spass));
 	sig_to_line(sig, a->signature, sizeof(sig));
 
 	d_begin(62, 23);
 	d_add(G_STRING, 0, 0, (long)"Mail account", 2, 1, 12, 1);
+	d_text(16, 1, opt.falcon ? "servers: the provider's own (Falcon mode)"
+				 : "servers: the gateway (Raspberry Pi)");
 	d_text(2, 3, "Account name:");
 	f_name = d_edit(17, 3, name, 30, 'X');
 	d_text(2, 4, "Your name:");
@@ -490,17 +494,34 @@ int dlg_account(ACCOUNT *a)
 	str_copy(a->fullname, full, sizeof(a->fullname));
 	str_copy(a->email, email, sizeof(a->email));
 	a->pop = selected(f_pop);
-	str_copy(a->host, host, sizeof(a->host));
-	a->port = (unsigned short)atoi(port);
-	if (!a->port)
-		a->port = a->pop ? 110 : 143;
+	if (opt.falcon) {
+		str_copy(a->dhost, host, sizeof(a->dhost));
+		a->dport = (unsigned short)atoi(port);
+		if (!a->dport)
+			a->dport = a->pop ? 995 : 993;
+	} else {
+		str_copy(a->host, host, sizeof(a->host));
+		a->port = (unsigned short)atoi(port);
+		if (!a->port)
+			a->port = a->pop ? 110 : 143;
+	}
 	str_copy(a->user, user, sizeof(a->user));
 	str_copy(a->pass, pass, sizeof(a->pass));
 	a->leave = selected(f_leave);
-	str_copy(a->smtphost, shost, sizeof(a->smtphost));
-	a->smtpport = (unsigned short)atoi(sport);
-	if (!a->smtpport)
-		a->smtpport = 587;
+	if (opt.falcon) {
+		str_copy(a->dsmtphost, shost, sizeof(a->dsmtphost));
+		a->dsmtpport = (unsigned short)atoi(sport);
+		if (!a->dsmtpport)
+			a->dsmtpport = 465;
+		/* a new account: the provider's servers from the address */
+		if (!a->dhost[0])
+			acct_preset(a);
+	} else {
+		str_copy(a->smtphost, shost, sizeof(a->smtphost));
+		a->smtpport = (unsigned short)atoi(sport);
+		if (!a->smtpport)
+			a->smtpport = 587;
+	}
 	str_copy(a->smtpuser, suser, sizeof(a->smtpuser));
 	str_copy(a->smtppass, spass, sizeof(a->smtppass));
 	line_to_sig(a->signature, sig, sizeof(a->signature));
@@ -512,13 +533,13 @@ int dlg_account(ACCOUNT *a)
 int dlg_settings(void)
 {
 	static char tz[6], check[4], hdrs[5], wrap[3];
-	short f_tz, f_check, f_hdrs, f_wrap, f_keep, f_log, f_heb, f_bridge, b_ok, r;
+	short f_tz, f_check, f_hdrs, f_wrap, f_keep, f_log, f_heb, f_bridge, f_falcon, b_ok, r;
 	snprintf(tz, sizeof(tz), "%d", opt.tz);
 	snprintf(check, sizeof(check), "%d", opt.check);
 	snprintf(hdrs, sizeof(hdrs), "%d", opt.page);
 	snprintf(wrap, sizeof(wrap), "%d", opt.wrap);
 
-	d_begin(52, 15);
+	d_begin(52, 17);
 	d_add(G_STRING, 0, 0, (long)"Settings", 2, 1, 8, 1);
 	d_text(2, 3, "Time zone, minutes east of UTC:");
 	f_tz = d_edit(40, 3, tz, 5, 'X');
@@ -532,8 +553,10 @@ int dlg_settings(void)
 	f_log = d_check(2, 9, "Write a protocol log (MAIL.LOG)", opt.log);
 	f_heb = d_check(2, 10, "Start with the Hebrew keyboard", opt.hebrew);
 	f_bridge = d_check(2, 11, "Bridge sends Hebrew reversed (Troll bridge)", cs_bridge_visual);
-	d_button(28, 13, 10, "Cancel", EXIT);
-	b_ok = d_button(40, 13, 10, "OK", EXIT | DEFAULT);
+	f_falcon = d_check(2, 13, "Falcon mode: secure (TLS) on this Atari", dlg_falcon);
+	d_text(4, 14, "off: plain, through the Raspberry Pi gateway");
+	d_button(28, 15, 10, "Cancel", EXIT);
+	b_ok = d_button(40, 15, 10, "OK", EXIT | DEFAULT);
 	d_end();
 	(void)f_check; (void)f_hdrs; (void)f_wrap;
 	r = d_do(f_tz);
@@ -553,6 +576,7 @@ int dlg_settings(void)
 	opt.log = selected(f_log);
 	opt.hebrew = selected(f_heb);
 	cs_bridge_visual = selected(f_bridge);
+	dlg_falcon = selected(f_falcon);
 	return 1;
 }
 

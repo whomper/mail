@@ -165,9 +165,11 @@ void dlg_about(void)
 	for (i = 0; i < naccts; i++)
 		if (accts[i]->im)
 			online = 1;
-	snprintf(conn, sizeof(conn), "%s  \xF9  %d account%s  \xF9  %s",
-		 strcmp(net_stack(), "none") ? net_stack() : "no network", naccts,
-		 naccts == 1 ? "" : "s", opt.offline ? "offline" : online ? "online" : "ready");
+	snprintf(conn, sizeof(conn), "%s  \xF9  %s  \xF9  %s",
+		 strcmp(net_stack(), "none") ? net_stack() : "no network",
+		 opt.falcon ? (strcmp(falcon_dsp_state(), "DSP") ? "TLS on the 68030" : "TLS with the DSP")
+			    : "through the gateway",
+		 opt.offline ? "offline" : online ? "online" : "ready");
 
 	dw = 50 * cw;
 	if (dw > desk_w - 2 * cw)

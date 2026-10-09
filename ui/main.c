@@ -61,6 +61,7 @@ static const MITEM m_opts[] = {
 	{ "  Accounts...         ", C_ACCOUNTS }, { "  Settings...         ", C_SETTINGS },
 	{ "  Font...             ", C_FONT },
 	{ "----------------------", C_SEP }, { "  Work offline        ", C_OFFLINE },
+	{ "  Falcon mode (TLS)   ", C_FALCON },
 	{ "  Hebrew keyboard F10 ", C_HEBREW }, { "  Protocol log        ", C_LOG }, { 0, 0 }
 };
 
@@ -193,6 +194,7 @@ void menu_update(void)
 	enable(C_NEWFOLDER, cur_acct && !cur_acct->pop);
 	enable(C_DELFOLDER, cur_finfo && !cur_finfo->local && !cur_finfo->role);
 	menu_icheck(menu, find_item(C_OFFLINE), opt.offline);
+	menu_icheck(menu, find_item(C_FALCON), opt.falcon);
 	menu_icheck(menu, find_item(C_HEBREW), hebrew_kbd);
 	menu_icheck(menu, find_item(C_LOG), opt.log);
 }
@@ -664,7 +666,10 @@ static void command(short cmd)
 	case C_DELFOLDER: cmd_delete_folder(cur_acct, cur_finfo); break;
 	case C_ACCOUNTS: cmd_accounts(); break;
 	case C_SETTINGS:
+		dlg_falcon = opt.falcon;
 		if (dlg_settings()) {
+			if (dlg_falcon != opt.falcon)
+				falcon_mode_set(dlg_falcon);
 			set_logging();
 			store_save_settings();
 			if (w_editor.h <= 0)
@@ -672,6 +677,10 @@ static void command(short cmd)
 			list_refresh();
 			win_redraw(&w_reader, 0);
 		}
+		break;
+	case C_FALCON:
+		falcon_mode_set(!opt.falcon);
+		list_titles();
 		break;
 	case C_OFFLINE:
 		opt.offline = !opt.offline;
@@ -689,6 +698,44 @@ static void command(short cmd)
 		break;
 	}
 	menu_update();
+}
+
+/* ---------------- Falcon mode ----------------
+ * On: MAIL talks TLS to the providers itself (BearSSL on the 68030, RSA
+ * signatures on the DSP). Off: plain, through the Raspberry Pi gateway.
+ * Each account keeps both sets of servers. */
+short dlg_falcon;
+
+int falcon_mode_set(int on)
+{
+	if (on) {
+		char missing[200];
+		int i;
+		if (get_cookie(0x5F435055L) < 20) {	/* _CPU */
+			alert(1, "[3][Falcon mode needs a 68020 or|better (Falcon, TT): this|Atari is too slow for TLS.][ OK ]");
+			return 0;
+		}
+		if (!pf_exists(conn_cacert)) {
+			alert(1, "[3][Falcon mode needs the root|certificates: put CACERT.PEM|next to MAIL.PRG. Get it|from curl.se/docs/caextract|or from MAIL's GitHub page.][ OK ]");
+			return 0;
+		}
+		missing[0] = 0;
+		for (i = 0; i < naccts; i++) {
+			ACCOUNT *a = accts[i];
+			if (!a->dhost[0] && !acct_preset(a)) {
+				long l = (long)strlen(missing);
+				snprintf(missing + l, sizeof(missing) - l, "%s%s", l ? ", " : "", a->name);
+			}
+		}
+		if (missing[0])
+			alert(1, "[1][Falcon mode connects to the|providers directly. Enter the|servers for: %s|in Options > Accounts.][ OK ]", missing);
+	}
+	opt.falcon = (short)on;
+	falcon_dsp_init();
+	mail_disconnect_all();
+	store_save_settings();
+	menu_update();
+	return 1;
 }
 
 /* ---------------- events ---------------- */
@@ -799,6 +846,7 @@ int main(void)
 
 	work_dir(dir, sizeof(dir));
 	store_init(dir);
+	falcon_dsp_init();
 	font_apply();
 	hebrew_kbd = opt.hebrew;
 	set_logging();
