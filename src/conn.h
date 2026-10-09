@@ -47,6 +47,7 @@ int   conn_getbytes(CONN *c, SBUF *b, long n);
 /* logging: set conn_logfile to a path to append the dialogue to it */
 extern char conn_logfile[200];
 void conn_log(const char *who, const char *dir, const char *text, long n);
+void conn_log_flush(void);	/* write out what is still buffered */
 /* the shape of a login (lengths, '@', '-') without the login itself, so
    the log shows a cut-off or mistyped password without giving it away */
 void conn_log_login(const char *who, const char *user, const char *pass);

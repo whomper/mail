@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "ui.h"
+#include "../src/plat.h"
 #include "../src/mail.h"
 #include "../src/compose.h"
 #include "../src/util.h"
@@ -131,7 +132,9 @@ void folders_select(ACCOUNT *a, FINFO *fi)
 	/* show what we have at once, then bring it up to date */
 	cur_folder = fold_open(a, fi);
 	list_load();
-	if (!fi->local && !opt.offline) {
+	/* a folder checked in the last two minutes is shown as it is: hopping
+	   between folders shouldn't wait for the server every time */
+	if (!fi->local && !opt.offline && (!fi->synced || pf_ms() - fi->synced > 120000UL)) {
 		busy(1);
 		mail_err[0] = 0;
 		if (!mail_sync_folder(a, fi, &newmsgs) && mail_err[0] && !mail_unreachable)

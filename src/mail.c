@@ -14,6 +14,7 @@
 #include "compose.h"
 #include "charset.h"
 #include "util.h"
+#include "conn.h"
 
 char mail_err[200];
 int mail_unreachable;
@@ -39,6 +40,22 @@ static int offline(void)
 		return 1;
 	}
 	return 0;
+}
+
+/* how long something took, for the protocol log: where the time goes */
+static void timing(unsigned long t0, long b0, const char *fmt, ...)
+{
+	char what[120], line[180];
+	unsigned long ms = pf_ms() - t0;
+	long kb = (conn_bytes - b0 + 512) / 1024;
+	va_list ap;
+	if (!conn_logfile[0])
+		return;
+	va_start(ap, fmt);
+	vsnprintf(what, sizeof(what), fmt, ap);
+	va_end(ap);
+	snprintf(line, sizeof(line), "%s: %ld KB in %lu.%02lu s", what, kb, ms / 1000, ms % 1000 / 10);
+	conn_log("IMAP", " -- ", line, (long)strlen(line));
 }
 
 /* ---------------- IMAP session ---------------- */
@@ -165,10 +182,14 @@ int mail_refresh_folders(ACCOUNT *a)
 	LISTCTX l;
 	short i;
 	int r;
+	unsigned long t0;
+	long b0;
 	if (a->pop)
 		return 1;
 	if (!mail_connect(a))
 		return 0;
+	t0 = pf_ms();
+	b0 = conn_bytes;
 	status("%s: reading the folder list...", a->name);
 	memset(&l, 0, sizeof(l));
 	l.a = a;
@@ -190,6 +211,7 @@ int mail_refresh_folders(ACCOUNT *a)
 		}
 	}
 	folders_save(a);
+	timing(t0, b0, "folder list, %d folders", a->nfolders);
 	return 1;
 }
 
@@ -290,6 +312,8 @@ static int sync_window(ACCOUNT *a, FINFO *fi, FOLDER *f, long *newmsgs)
 	unsigned long *want;
 	char range[40];
 	int r;
+	unsigned long t0 = pf_ms();
+	long b0 = conn_bytes;
 
 	status("%s: opening %s...", a->name, fi->disp);
 	r = imap_select(a->im, fi->server, 0);
@@ -386,6 +410,8 @@ static int sync_window(ACCOUNT *a, FINFO *fi, FOLDER *f, long *newmsgs)
 	}
 	if (newmsgs)
 		*newmsgs = hc.unseen;
+	if (r > 0)
+		timing(t0, b0, "%s: %ld flags, %ld new headers", fi->disp, u.n, j);
 	free(want);
 	free(u.uid);
 	free(u.flags);
@@ -418,6 +444,8 @@ int mail_sync_folder(ACCOUNT *a, FINFO *fi, long *newmsgs)
 	ok = sync_window(a, fi, f, newmsgs);
 	if (ok && flags_pushed)		/* the counts changed with them */
 		imap_status(a->im, fi->server, &messages, &unseen);
+	if (ok)
+		fi->synced = pf_ms() | 1;
 	if (messages >= 0)
 		fi->total = messages;
 	if (unseen >= 0)
@@ -597,9 +625,13 @@ char *mail_fetch(FOLDER *f, HDR *h, long *len)
 		BODYCTX c;
 		char set[16];
 		int r;
+		unsigned long t0;
+		long b0;
 		if (!select_folder(a, f->fi))
 			return 0;
 		status("%s: downloading the message (%ld bytes)...", a->name, h->size);
+		t0 = pf_ms();
+		b0 = conn_bytes;
 		sb_init(&c.body);
 		snprintf(set, sizeof(set), "%lu", h->uid);
 		r = imap_fetch(a->im, set, "(UID BODY.PEEK[])", body_cb, &c);
@@ -612,6 +644,7 @@ char *mail_fetch(FOLDER *f, HDR *h, long *len)
 			str_copy(mail_err, "The message is no longer on the server.", sizeof(mail_err));
 			return 0;
 		}
+		timing(t0, b0, "message %lu", h->uid);
 		msg_save(f, h->uid, c.body.s, c.body.len);
 		h->flags |= MF_CACHED;
 		f->dirty = 1;
@@ -633,22 +666,11 @@ char *mail_fetch(FOLDER *f, HDR *h, long *len)
 int mail_flag(FOLDER *f, HDR *h, unsigned short flags, int add)
 {
 	unsigned short nf = add ? (h->flags | flags) : (h->flags & ~flags);
-	if (!f->fi->local) {
-		/* not connected: change it here, tell the server next time */
-		if (opt.offline || f->acct->cut || !select_folder(f->acct, f->fi)) {
-			if (!opt.offline && !f->acct->cut && !mail_unreachable)
-				return 0;
-			if (nf != h->flags)
-				nf |= MF_FLAGSYNC;
-		} else {
-			char set[16];
-			int r;
-			snprintf(set, sizeof(set), "%lu", h->uid);
-			r = imap_store(f->acct->im, set, add, flags);
-			if (r <= 0)
-				return imap_failed(f->acct, r);
-		}
-	}
+	/* changed here at once; the server hears of it in one batch when
+	   MAIL is idle, at the next sync or at quit (mail_push_flags), so a
+	   click never waits for the network */
+	if (!f->fi->local && nf != h->flags)
+		nf |= MF_FLAGSYNC;
 	if (nf != h->flags) {
 		/* IMAP counts come from the server: keep them in step */
 		if (!f->fi->local && ((nf ^ h->flags) & MF_SEEN))
@@ -659,6 +681,57 @@ int mail_flag(FOLDER *f, HDR *h, unsigned short flags, int add)
 		f->dirty = 1;
 		fold_count(f);
 	}
+	return 1;
+}
+
+int mail_flags_pending(FOLDER *f)
+{
+	long i;
+	if (!f || f->fi->local)
+		return 0;
+	for (i = 0; i < f->n; i++)
+		if (f->h[i].flags & MF_FLAGSYNC)
+			return 1;
+	return 0;
+}
+
+int mail_push_flags(FOLDER *f)
+{
+	static const unsigned short bits[3] = { MF_SEEN, MF_FLAGGED, MF_ANSWERED };
+	ACCOUNT *a;
+	unsigned long *list;
+	long i, n, pos;
+	short b, add;
+	int r = 1;
+	if (!mail_flags_pending(f) || opt.offline || f->acct->cut)
+		return 1;
+	a = f->acct;
+	if (!select_folder(a, f->fi))
+		return mail_unreachable;	/* not connected: they wait */
+	list = malloc(f->n * sizeof(unsigned long));
+	if (!list)
+		return 0;
+	/* one STORE for each flag set and each flag cleared */
+	for (b = 0; b < 3 && r > 0; b++)
+		for (add = 0; add < 2 && r > 0; add++) {
+			n = 0;
+			for (i = 0; i < f->n; i++) {
+				HDR *h = &f->h[i];
+				if ((h->flags & MF_FLAGSYNC) && ((h->flags & bits[b]) != 0) == add)
+					list[n++] = h->uid;
+			}
+			for (pos = 0; pos < n && r > 0; ) {
+				char set[700];
+				uidset(list, n, &pos, set, sizeof(set), 50);
+				r = imap_store(a->im, set, add, bits[b]);
+			}
+		}
+	free(list);
+	if (r <= 0)
+		return imap_failed(a, r);
+	for (i = 0; i < f->n; i++)
+		f->h[i].flags &= ~MF_FLAGSYNC;
+	f->dirty = 1;
 	return 1;
 }
 
@@ -736,6 +809,7 @@ int mail_delete(FOLDER *f, HDR *h)
 	ACCOUNT *a = f->acct;
 	FINFO *trash = folder_role(a, FR_TRASH);
 	unsigned long uid = h->uid;
+	mail_push_flags(f);		/* the copy in Trash keeps them */
 	if (f->fi->local) {
 		if (trash && trash->local && trash != f->fi && f->fi->role != FR_OUTBOX)
 			if (!local_copy(f, h, trash))
@@ -770,6 +844,7 @@ int mail_move(FOLDER *f, HDR *h, FINFO *dest)
 	unsigned long uid = h->uid;
 	if (dest == f->fi)
 		return 1;
+	mail_push_flags(f);		/* the moved copy keeps them */
 	if (f->fi->local != dest->local) {
 		str_copy(mail_err, "Messages can only move between folders of the same kind.", sizeof(mail_err));
 		return 0;

@@ -27,6 +27,7 @@
 #include "compose.h"
 #include "charset.h"
 #include "util.h"
+#include "conn.h"
 
 static void say(const char *atari)
 {
@@ -70,6 +71,7 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	store_init(argv[1]);
+	atexit(conn_log_flush);		/* every way out, error returns too */
 	if (getenv("MAIL_LOG")) {
 		path_join(conn_logfile, sizeof(conn_logfile), argv[1], "MAIL.LOG");
 	}
@@ -230,7 +232,7 @@ int main(int argc, char **argv)
 			r = find_folder(a, argv[6]) ? mail_move(f, h, find_folder(a, argv[6])) : 0;
 		else if (argc > 6) {
 			unsigned short fl = strstr(argv[6], "seen") ? MF_SEEN : MF_FLAGGED;
-			r = mail_flag(f, h, fl, argv[6][0] == '+');
+			r = mail_flag(f, h, fl, argv[6][0] == '+') && mail_push_flags(f);
 		}
 		fold_close(f);
 		folders_save(a);

@@ -222,6 +222,7 @@ static void idle(void)
 
 static void set_logging(void)
 {
+	conn_log_flush();
 	if (opt.log)
 		path_join(conn_logfile, sizeof(conn_logfile), opt.workdir, "MAIL.LOG");
 	else
@@ -564,6 +565,8 @@ void cmd_refresh_folders(ACCOUNT *a)
 		refind_current(server);
 	folders_build();
 }
+
+static unsigned long last_input;	/* pf_ms() of the last key, click or message */
 
 static void wait_release(void)
 {
@@ -929,6 +932,13 @@ int main(void)
 				menu_update();
 			wait_release();
 		}
+		if (which & (MU_KEYBD | MU_BUTTON | MU_MESAG))
+			last_input = pf_ms();
+		/* read and flag changes go to the server once the user pauses */
+		if ((which & MU_TIMER) && pf_ms() - last_input > 3000 && mail_flags_pending(cur_folder)) {
+			mail_push_flags(cur_folder);
+			last_input = pf_ms();	/* failed: not again at once */
+		}
 		if ((which & MU_TIMER) && opt.check > 0 && !opt.offline && naccts &&
 		    pf_ms() - last_check > (unsigned long)opt.check * 60000UL) {
 			quiet_check = 1;
@@ -937,7 +947,12 @@ int main(void)
 		}
 	}
 
+	if (mail_flags_pending(cur_folder)) {
+		status("Telling the server what you read...");
+		mail_push_flags(cur_folder);
+	}
 	mail_disconnect_all();
+	conn_log_flush();
 	if (cur_folder)
 		fold_close(cur_folder);
 	if (!opt.keepcache)

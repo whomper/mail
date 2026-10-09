@@ -248,7 +248,10 @@ so those are left out when showing a message.
 messages of each folder, as many as you have loaded (100 to start with),
 and the messages you have read; the counts in the folder pane are the
 server's. Changes made elsewhere (read, deleted, moved on your phone) show up
-at the next check. Deleting moves a message to Trash on the server;
+at the next check. Opening, flagging or marking a message changes it at once
+on the Atari; MAIL tells the server in one go when you pause for a few
+seconds, and at the latest when you quit. A folder you opened in the last two
+minutes opens straight from disk; Check mail always asks the server. Deleting moves a message to Trash on the server;
 deleting in Trash removes it for good.
 
 **POP3** accounts download new mail into local folders (Inbox, Sent,

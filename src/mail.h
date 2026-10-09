@@ -28,6 +28,10 @@ int  mail_check(ACCOUNT *a, long *newmsgs);
 /* the raw message: from the cache, else downloaded; marks it read */
 char *mail_fetch(FOLDER *f, HDR *h, long *len);
 int  mail_flag(FOLDER *f, HDR *h, unsigned short flags, int add);
+/* read/flag changes not yet on the server, and sending them (one STORE
+   per flag); 1 when sent or when they must wait for a connection */
+int  mail_flags_pending(FOLDER *f);
+int  mail_push_flags(FOLDER *f);
 int  mail_delete(FOLDER *f, HDR *h);
 int  mail_mark_all_read(ACCOUNT *a, FINFO *fi);	/* the whole folder, on the server too */
 int  mail_move(FOLDER *f, HDR *h, FINFO *dest);

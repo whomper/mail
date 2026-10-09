@@ -78,26 +78,56 @@ const char *conn_security(CONN *c)
 }
 long conn_bytes;
 
-void conn_log(const char *who, const char *dir, const char *text, long n)
+/* the log is written in blocks: opening the file for every line made a
+   big download crawl on an Atari disk. Milestones (" -- ", " !! ")
+   write it out at once, so a crash loses little */
+static char logbuf[4096];
+static int loglen;
+
+void conn_log_flush(void)
 {
 	int h;
+	if (!loglen)
+		return;
+	if (conn_logfile[0] && (h = pf_open(conn_logfile, PF_APPEND)) >= 0) {
+		pf_write(h, logbuf, loglen);
+		pf_close(h);
+	}
+	loglen = 0;
+}
+
+static void log_add(const char *s, long n)
+{
+	while (n > 0) {
+		long k = (long)sizeof(logbuf) - loglen;
+		if (k > n)
+			k = n;
+		memcpy(logbuf + loglen, s, k);
+		loglen += (int)k;
+		s += k;
+		n -= k;
+		if (loglen == (int)sizeof(logbuf))
+			conn_log_flush();
+	}
+}
+
+void conn_log(const char *who, const char *dir, const char *text, long n)
+{
 	if (!conn_logfile[0])
 		return;
-	h = pf_open(conn_logfile, PF_APPEND);
-	if (h < 0)
-		return;
-	pf_write(h, who, strlen(who));
-	pf_write(h, dir, strlen(dir));
+	log_add(who, strlen(who));
+	log_add(dir, strlen(dir));
 	if (n > 400) {
 		char tmp[40];
-		pf_write(h, text, 200);
+		log_add(text, 200);
 		snprintf(tmp, sizeof(tmp), " [... %ld bytes]", n);
-		pf_write(h, tmp, strlen(tmp));
+		log_add(tmp, strlen(tmp));
 	} else {
-		pf_write(h, text, n);
+		log_add(text, n);
 	}
-	pf_write(h, "\r\n", 2);
-	pf_close(h);
+	log_add("\r\n", 2);
+	if (dir[1] == '-' || dir[1] == '!')
+		conn_log_flush();
 }
 
 static CONN *open_plain(const char *name, const char *host, unsigned short port, char *err, int errlen)

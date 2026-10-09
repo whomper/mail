@@ -28,6 +28,7 @@ typedef struct {
 	short depth;		/* hierarchy level for indenting */
 	short local;		/* local-only folder (Outbox, POP Inbox...) */
 	long total, unread;
+	unsigned long synced;	/* runtime: pf_ms() of the last sync, 0 never */
 } FINFO;
 
 typedef struct {
