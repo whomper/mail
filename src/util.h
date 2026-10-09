@@ -22,6 +22,9 @@ int  sb_printf(SBUF *b, const char *fmt, ...) __attribute__((format(printf, 2, 3
 char *sb_steal(SBUF *b);		/* hand over the buffer (NUL-terminated) */
 
 char *str_ndup(const char *s, long n);
+/* n with thousands separators: 1,234,567. Eight buffers in turn, so a
+   printf may use several */
+const char *num(long n);
 char *str_trim(char *s);		/* in place */
 int   str_istarts(const char *s, const char *prefix);
 const char *str_istr(const char *h, const char *n);	/* case-insensitive strstr */

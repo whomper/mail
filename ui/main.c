@@ -316,7 +316,7 @@ void cmd_check_all(void)
 		status(errs);
 	} else {
 		char m[60];
-		snprintf(m, sizeof(m), total == 1 ? "1 new message" : "%ld new messages", total);
+		snprintf(m, sizeof(m), total == 1 ? "1 new message" : "%s new messages", num(total));
 		status(m);
 	}
 	menu_update();
@@ -682,6 +682,7 @@ static void command(short cmd)
 		if (dlg_settings()) {
 			if (dlg_falcon != opt.falcon)
 				falcon_mode_set(dlg_falcon);
+			falcon_dsp_init();
 			set_logging();
 			store_save_settings();
 			if (w_editor.h <= 0)

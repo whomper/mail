@@ -267,7 +267,8 @@ for i in range(1, 251):
     m.append("Big", "(\\Seen)" if i < 245 else "()", None, msg.encode())
 m.logout()
 PY
-out=$(run sync 1 Big)
+out=$(MAIL_DEBUG=1 run sync 1 Big)
+expect "progress: headers counted with a bar" "Big - headers 100 of 100  \[##########\] 100%" "$out"
 expect "big folder: server count, only 100 mirrored" "synced: 250 total, 6 unread, .* 100 loaded" "$out"
 out=$(run list 1 Big)
 expect "big folder: newest message mirrored" "Big 250" "$out"

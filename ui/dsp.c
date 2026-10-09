@@ -81,7 +81,7 @@ static int accel(unsigned char *x, size_t xlen, const unsigned char *n, size_t n
 
 void falcon_dsp_init(void)
 {
-	have_dsp = opt.falcon && dsp_rsa_present();
+	have_dsp = opt.falcon && opt.dsp && dsp_rsa_present();
 	tls_rsa_accel = have_dsp ? accel : 0;
 }
 

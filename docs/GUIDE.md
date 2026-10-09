@@ -67,7 +67,9 @@ MAIL works in one of two ways, chosen with **Options > Falcon mode
   Pi gateway, and the Pi encrypts the connection to your provider.
 - **On**: MAIL encrypts on the Atari itself (TLS 1.2) and talks straight
   to your provider; no Pi is needed. On a Falcon the DSP56001 checks the
-  servers' certificates (about 0.2 s instead of 1.3 s on the 68030).
+  servers' certificates (about 0.2 s instead of 1.3 s on the 68030). "use the
+  DSP" in Options > Settings switches that off, leaving all of it to the
+  68030 (slower, but a way to rule the DSP out if something goes wrong).
 
 Falcon mode needs:
 

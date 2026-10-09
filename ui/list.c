@@ -42,12 +42,13 @@ void list_titles(void)
 	snprintf(t, sizeof(t), "%s - %s", cur_finfo->disp, cur_acct->name);
 	win_title(&w_list, t);
 	if (opt.offline)
-		snprintf(i, sizeof(i), "%ld unread  (offline)", cur_finfo->unread);
+		snprintf(i, sizeof(i), "%s unread  (offline)", num(cur_finfo->unread));
 	else if (cur_acct->cut && !cur_finfo->local)
-		snprintf(i, sizeof(i), "%ld unread  (not connected: Check mail tries again)", cur_finfo->unread);
+		snprintf(i, sizeof(i), "%s unread  (not connected: Check mail tries again)", num(cur_finfo->unread));
 	else
-		snprintf(i, sizeof(i), "%ld of %ld, %ld unread", cur_folder->n,
-			 cur_finfo->total > cur_folder->n ? cur_finfo->total : cur_folder->n, cur_finfo->unread);
+		snprintf(i, sizeof(i), "%s of %s, %s unread", num(cur_folder->n),
+			 num(cur_finfo->total > cur_folder->n ? cur_finfo->total : cur_folder->n),
+			 num(cur_finfo->unread));
 	win_info(&w_list, i);
 }
 
@@ -202,7 +203,7 @@ static void draw(WIN *w, GRECT *clip)
 		char t[80];
 		short y = w->work.y + w->head_h + (short)((nview - w->top) * ch);
 		long next = more < opt.page ? more : opt.page;
-		snprintf(t, sizeof(t), "\x02 Load %ld more  (%ld older on %s)", next, more,
+		snprintf(t, sizeof(t), "\x02 Load %s more  (%s older on %s)", num(next), num(more),
 			 cur_finfo->local ? "disk" : "the server");
 		r.x = w->work.x;
 		r.y = y;

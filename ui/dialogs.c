@@ -545,13 +545,13 @@ int dlg_account(ACCOUNT *a)
 int dlg_settings(void)
 {
 	static char tz[6], check[4], hdrs[5], wrap[3];
-	short f_tz, f_check, f_hdrs, f_wrap, f_keep, f_log, f_heb, f_bridge, f_falcon, b_ok, r;
+	short f_tz, f_check, f_hdrs, f_wrap, f_keep, f_log, f_heb, f_bridge, f_falcon, f_dsp, b_ok, r;
 	snprintf(tz, sizeof(tz), "%d", opt.tz);
 	snprintf(check, sizeof(check), "%d", opt.check);
 	snprintf(hdrs, sizeof(hdrs), "%d", opt.page);
 	snprintf(wrap, sizeof(wrap), "%d", opt.wrap);
 
-	d_begin(52, 17);
+	d_begin(52, 18);
 	d_add(G_STRING, 0, 0, (long)"Settings", 2, 1, 8, 1);
 	d_text(2, 3, "Time zone, minutes east of UTC:");
 	f_tz = d_edit(40, 3, tz, 5, 'X');
@@ -567,8 +567,9 @@ int dlg_settings(void)
 	f_bridge = d_check(2, 11, "Bridge sends Hebrew reversed (Troll bridge)", cs_bridge_visual);
 	f_falcon = d_check(2, 13, "Falcon mode: secure (TLS) on this Atari", dlg_falcon);
 	d_text(4, 14, "off: plain, through the Raspberry Pi gateway");
-	d_button(28, 15, 10, "Cancel", EXIT);
-	b_ok = d_button(40, 15, 10, "OK", EXIT | DEFAULT);
+	f_dsp = d_check(4, 15, "use the DSP for the signatures", opt.dsp);
+	d_button(28, 16, 10, "Cancel", EXIT);
+	b_ok = d_button(40, 16, 10, "OK", EXIT | DEFAULT);
 	d_end();
 	(void)f_check; (void)f_hdrs; (void)f_wrap;
 	r = d_do(f_tz);
@@ -589,6 +590,7 @@ int dlg_settings(void)
 	opt.hebrew = selected(f_heb);
 	cs_bridge_visual = selected(f_bridge);
 	dlg_falcon = selected(f_falcon);
+	opt.dsp = selected(f_dsp);
 	return 1;
 }
 

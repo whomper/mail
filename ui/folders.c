@@ -100,9 +100,9 @@ static void draw(WIN *w, GRECT *clip)
 			short room = cols - ind;
 			cnt[0] = 0;
 			if (e->fi->unread > 0)
-				snprintf(cnt, sizeof(cnt), " %ld", e->fi->unread);
+				snprintf(cnt, sizeof(cnt), " %s", num(e->fi->unread));
 			else if (e->fi->role == FR_OUTBOX && e->fi->total > 0)
-				snprintf(cnt, sizeof(cnt), " %ld", e->fi->total);
+				snprintf(cnt, sizeof(cnt), " %s", num(e->fi->total));
 			room -= (short)strlen(cnt) + 1;
 			text_at(w->work.x + 2 + ind * cw, y, e->fi->disp, strlen(e->fi->disp), room,
 				flags | (e->fi->noselect ? TX_LIGHT : 0));

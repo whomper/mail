@@ -53,6 +53,8 @@ void conn_log_flush(void);	/* write out what is still buffered */
 void conn_log_login(const char *who, const char *user, const char *pass);
 
 /* progress for the UI: bytes received so far in the current operation */
-extern long conn_bytes;
+extern long conn_bytes, conn_bytes_out;	/* received and sent, ever */
+/* called whenever data comes in or goes out (progress display) */
+extern void (*conn_tick)(void);
 
 #endif

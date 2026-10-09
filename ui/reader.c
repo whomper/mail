@@ -287,9 +287,9 @@ static void draw(WIN *w, GRECT *clip)
 			if (nl > cols - 4)
 				nl = cols - 4;
 			if (p->size < 1024)
-				snprintf(sz, sizeof(sz), "%ld bytes", p->size);
+				snprintf(sz, sizeof(sz), "%s bytes", num(p->size));
 			else
-				snprintf(sz, sizeof(sz), "%ld KB", (p->size + 512) / 1024);
+				snprintf(sz, sizeof(sz), "%s KB", num((p->size + 512) / 1024));
 			snprintf(t, sizeof(t), "  (%s, %s)", p->type, sz);
 			text_at(x0, y, "\xAF", 1, cols, TX_BOLD);
 			text_at(x0 + 2 * cw, y, p->name, nl, nl, TX_BOLD);

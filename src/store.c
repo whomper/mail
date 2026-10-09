@@ -31,6 +31,7 @@ static void defaults(void)
 	opt.log = 0;
 	opt.hebrew = 0;
 	opt.offline = 0;
+	opt.dsp = 1;
 	opt.wrap = 72;
 	opt.font_id = 1;
 	opt.font_pt = 0;	/* the system font at the screen's size */
@@ -282,6 +283,7 @@ static void set_opt(const char *k, const char *v)
 	else if (!strcmp(k, "editor")) shorts(v, &opt.ed_x, 4);
 	else if (!strcmp(k, "font")) shorts(v, &opt.font_id, 2);
 	else if (!strcmp(k, "falcon")) opt.falcon = n != 0;
+	else if (!strcmp(k, "dsp")) opt.dsp = n != 0;
 	else if (!strcmp(k, "bridgeorder")) cs_bridge_visual = n != 0;
 	else if (!strcmp(k, "hebfont")) opt.hebfont = n >= 0 && n <= 2 ? n : 0;
 }
@@ -398,6 +400,8 @@ int store_save_settings(void)
 	note(&b, "1 = Falcon mode: MAIL connects to the mail providers itself, with TLS (the");
 	note(&b, "DSP checks signatures); 0 = through the Raspberry Pi gateway. Options > Settings");
 	sb_printf(&b, "falcon=%d\r\n", opt.falcon);
+	note(&b, "Falcon mode: 1 = the DSP checks the servers' signatures, 0 = the 68030 does");
+	sb_printf(&b, "dsp=%d\r\n", opt.dsp);
 	note(&b, "1 = Hebrew that arrives already in Atari characters (from a bridge made for");
 	note(&b, "Troll) is in display order: turn it back into reading order; set in Options > Settings");
 	sb_printf(&b, "bridgeorder=%d\r\n", cs_bridge_visual);

@@ -144,3 +144,25 @@ unsigned long str_hash(const char *s)
 		h = h * 33 + (unsigned char)*s++;
 	return h;
 }
+
+const char *num(long n)
+{
+	static char bufs[8][16];
+	static int k;
+	char *out = bufs[k++ & 7], digits[12];
+	unsigned long v = n < 0 ? 0UL - (unsigned long)n : (unsigned long)n;
+	int nd = 0, o = 0;
+	do {
+		digits[nd++] = (char)('0' + v % 10);
+		v /= 10;
+	} while (v);
+	if (n < 0)
+		out[o++] = '-';
+	while (nd) {
+		out[o++] = digits[--nd];
+		if (nd && nd % 3 == 0)
+			out[o++] = ',';
+	}
+	out[o] = 0;
+	return out;
+}

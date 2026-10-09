@@ -259,8 +259,18 @@ static void t_tls(void)
 	remove(tls_roots_cache);
 }
 
+static void t_num(void)
+{
+	CHECK(!strcmp(num(0), "0"), "0");
+	CHECK(!strcmp(num(999), "999"), "999");
+	CHECK(!strcmp(num(1000), "1,000"), "1,000: %s", num(1000));
+	CHECK(!strcmp(num(1234567), "1,234,567"), "1,234,567: %s", num(1234567));
+	CHECK(!strcmp(num(-45210), "-45,210"), "-45,210: %s", num(-45210));
+}
+
 int main(void)
 {
+	t_num();
 	t_charset();
 	t_mime();
 	t_compose();

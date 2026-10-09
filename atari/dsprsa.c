@@ -11,13 +11,12 @@
 #include <string.h>
 #include "tos.h"
 #include "dsprsa.h"
+#include "plat.h"
 #include "../dsp/rsa_prog.h"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
 
 #define HZ200   (*(volatile unsigned long *)0x4baL)
-#define PSGSEL  (*(volatile unsigned char *)0xffff8800L)
-#define PSGWR   (*(volatile unsigned char *)0xffff8802L)
 #define HISR    (*(volatile unsigned char *)0xffffa202L)
 #define HTXH    (*(volatile unsigned char *)0xffffa205L)
 #define HTXM    (*(volatile unsigned char *)0xffffa206L)
@@ -34,6 +33,21 @@ int dsp_rsa_present(void)
 }
 
 /* ---------------- talking to the DSP (supervisor mode) ---------------- */
+
+static void pause_ms(unsigned long ms)
+{
+	unsigned long t0 = pf_ms();
+	while (pf_ms() - t0 < ms)
+		;
+}
+
+static void dsp_reset(void)
+{
+	trap14_ww(30, 0x10);		/* Ongibit: hold the DSP in reset */
+	pause_ms(5);
+	trap14_ww(29, ~0x10);		/* Offgibit: let it go: it starts its bootstrap */
+	pause_ms(5);
+}
 
 static unsigned long io_words[16 + 2 * MAXN];
 static int io_n, io_out, io_fail;
@@ -65,19 +79,8 @@ static int get(unsigned long *w)
 
 static void sup_run(void)
 {
-	unsigned char v;
-	volatile int d;
 	int i;
 	io_fail = 1;
-	/* reset: bit 4 of the sound chip's port A */
-	PSGSEL = 14;
-	v = PSGSEL;
-	PSGWR = v | 0x10;
-	for (d = 0; d < 2000; d++)
-		;
-	PSGWR = v & ~0x10;
-	for (d = 0; d < 2000; d++)
-		;
 	/* the bootstrap loads 512 words and starts them */
 	for (i = 0; i < 512; i++)
 		if (!put(dsp_rsa_prog[i]))
@@ -218,6 +221,10 @@ int dsp_rsa_public(unsigned char *x, size_t xlen, const unsigned char *n, size_t
 	lock = (int)trap14_w(104);		/* Dsp_Lock */
 	if (lock == -1)
 		return 0;			/* another program has it */
+	/* reset: bit 4 of the sound chip's port A, through the XBIOS, which
+	   changes it with interrupts off. Writing the chip directly raced the
+	   system's own use of it (floppy, key click) on a real Falcon */
+	dsp_reset();
 	Supexec(sup_run);
 	if (lock == 0)
 		trap14_w(105);			/* Dsp_Unlock */

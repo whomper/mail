@@ -32,6 +32,94 @@ static void status(const char *fmt, ...)
 	mail_status(tmp);
 }
 
+/* ---------------- progress on the status line ---------------- */
+
+/* "Home: downloading the message  [######....] 60%  29 KB": by bytes
+   against an expected size, by items (headers) against a count, or just
+   the bytes so far when the size isn't known. Shown at most four times a
+   second: the info line is redrawn by the AES. */
+static struct {
+	char label[120];
+	int out;			/* counting bytes sent, not received */
+	long base, total;		/* bytes */
+	long items, nitems;
+	unsigned long last;
+	int on;
+} prog;
+
+static long prog_bytes(void)
+{
+	return (prog.out ? conn_bytes_out : conn_bytes) - prog.base;
+}
+
+static void prog_show(void)
+{
+	char bar[16], line[200];
+	long done = prog_bytes(), pct = -1;
+	short i;
+	prog.last = pf_ms();
+	if (prog.nitems > 0)
+		pct = prog.items * 100 / prog.nitems;
+	else if (prog.total > 0)
+		pct = done / (prog.total / 100 + 1);
+	if (pct > 100)
+		pct = 100;
+	if (pct < 0) {
+		snprintf(line, sizeof(line), "%s  %s KB", prog.label, num((done + 512) / 1024));
+	} else {
+		for (i = 0; i < 10; i++)
+			bar[i] = i < pct / 10 ? '#' : '.';
+		bar[10] = 0;
+		if (prog.nitems > 0)
+			snprintf(line, sizeof(line), "%s %s of %s  [%s] %ld%%", prog.label,
+				 num(prog.items), num(prog.nitems), bar, pct);
+		else
+			snprintf(line, sizeof(line), "%s  [%s] %ld%%  %s KB", prog.label, bar, pct,
+				 num((done + 512) / 1024));
+	}
+	if (mail_status)
+		mail_status(line);
+}
+
+static void prog_tick(void)
+{
+	if (pf_ms() - prog.last >= 250)
+		prog_show();
+}
+
+/* start showing progress; total: expected bytes (0 unknown), nitems: a
+   count of things to come (0: count bytes) */
+static void prog_start(int out, long total, long nitems, const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(prog.label, sizeof(prog.label), fmt, ap);
+	va_end(ap);
+	prog.out = out;
+	prog.base = out ? conn_bytes_out : conn_bytes;
+	prog.total = total;
+	prog.items = 0;
+	prog.nitems = nitems;
+	prog.on = 1;
+	conn_tick = prog_tick;
+	prog_show();
+}
+
+static void prog_item(void)
+{
+	if (!prog.on)
+		return;
+	prog.items++;
+	if (prog.items == prog.nitems || pf_ms() - prog.last >= 250)
+		prog_show();
+}
+
+static void prog_end(void)
+{
+	prog.on = 0;
+	conn_tick = 0;
+}
+
 static int offline(void)
 {
 	if (opt.offline) {
@@ -190,13 +278,14 @@ int mail_refresh_folders(ACCOUNT *a)
 		return 0;
 	t0 = pf_ms();
 	b0 = conn_bytes;
-	status("%s: reading the folder list...", a->name);
+	prog_start(0, 0, 0, "%s: reading the folder list", a->name);
 	memset(&l, 0, sizeof(l));
 	l.a = a;
 	for (i = 0; i < a->nfolders; i++)
 		if (a->folders[i].local)
 			l.seen[i] = 1;
 	r = imap_list(a->im, list_cb, &l);
+	prog_end();
 	if (r <= 0)
 		return imap_failed(a, r);
 	/* drop folders that are gone from the server */
@@ -241,6 +330,7 @@ static void uidflags_cb(void *ud, IMAPFETCH *f)
 	}
 	u->uid[u->n] = f->uid;
 	u->flags[u->n++] = f->flags;
+	prog_item();
 }
 
 /* sort the (uid, flags) pairs by uid */
@@ -296,6 +386,7 @@ static void header_cb(void *ud, IMAPFETCH *im)
 	c->added++;
 	if (!(h->flags & MF_SEEN))
 		c->unseen++;
+	prog_item();
 }
 
 /* Mirror the newest f->window messages of a folder (opt.page to start
@@ -340,8 +431,9 @@ static int sync_window(ACCOUNT *a, FINFO *fi, FOLDER *f, long *newmsgs)
 	first = n > f->window ? n - f->window + 1 : 1;
 	snprintf(range, sizeof(range), "%ld:%ld", first, n);
 	memset(&u, 0, sizeof(u));
-	status("%s: checking %s...", a->name, fi->disp);
+	prog_start(0, 0, n - first + 1, "%s: checking %s -", a->name, fi->disp);
 	r = imap_fetch_seq(a->im, range, "(UID FLAGS)", uidflags_cb, &u);
+	prog_end();
 	if (r <= 0) {
 		free(u.uid);
 		free(u.flags);
@@ -400,14 +492,16 @@ static int sync_window(ACCOUNT *a, FINFO *fi, FOLDER *f, long *newmsgs)
 	hc.f = f;
 	hc.added = hc.unseen = 0;
 	r = 1;
+	if (j)
+		prog_start(0, 0, j, "%s: %s - headers", a->name, fi->disp);
 	for (pos = 0; pos < j && r > 0; ) {
 		char set[700];
 		uidset(want, j, &pos, set, sizeof(set), 50);
-		status("%s: %s - headers %ld of %ld", a->name, fi->disp, pos, j);
 		r = imap_fetch(a->im, set,
 			       "(UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE)])",
 			       header_cb, &hc);
 	}
+	prog_end();
 	if (newmsgs)
 		*newmsgs = hc.unseen;
 	if (r > 0)
@@ -497,7 +591,7 @@ static void pop_cb(void *ud, long num, const char *uid, long size)
 	char key[100];
 	SBUF msg;
 	HDR *h;
-	(void)size;
+	int r;
 	snprintf(key, sizeof(key), "\n%s\n", uid);
 	if (c->known && strstr(c->known, key)) {
 		/* already downloaded */
@@ -507,9 +601,11 @@ static void pop_cb(void *ud, long num, const char *uid, long size)
 	}
 	if (c->fail)
 		return;
-	status("%s: downloading message %ld...", c->a->name, c->got + 1);
+	prog_start(0, size, 0, "%s: downloading message %ld", c->a->name, c->got + 1);
 	sb_init(&msg);
-	if (pop3_retr(c->p, num, &msg) <= 0) {
+	r = pop3_retr(c->p, num, &msg);
+	prog_end();
+	if (r <= 0) {
 		c->fail = 1;
 		sb_free(&msg);
 		return;
@@ -629,12 +725,13 @@ char *mail_fetch(FOLDER *f, HDR *h, long *len)
 		long b0;
 		if (!select_folder(a, f->fi))
 			return 0;
-		status("%s: downloading the message (%ld bytes)...", a->name, h->size);
+		prog_start(0, h->size, 0, "%s: downloading the message", a->name);
 		t0 = pf_ms();
 		b0 = conn_bytes;
 		sb_init(&c.body);
 		snprintf(set, sizeof(set), "%lu", h->uid);
 		r = imap_fetch(a->im, set, "(UID BODY.PEEK[])", body_cb, &c);
+		prog_end();
 		if (r <= 0) {
 			sb_free(&c.body);
 			imap_failed(a, r);
@@ -905,7 +1002,7 @@ int mail_send_outbox(ACCOUNT *a, int *sent)
 	SMTP *s;
 	const char *user, *pass;
 	char helo[64];
-	long i;
+	long i, nsend;
 	int ok = 1;
 
 	*sent = 0;
@@ -935,6 +1032,7 @@ int mail_send_outbox(ACCOUNT *a, int *sent)
 		return -1;
 	}
 	sentf = folder_role(a, FR_SENT);
+	nsend = f->n;
 	for (i = f->n - 1; i >= 0; i--) {
 		HDR *h = &f->h[i];
 		long len, sl;
@@ -947,8 +1045,10 @@ int mail_send_outbox(ACCOUNT *a, int *sent)
 		for (k = 0; k < n; k++)
 			rp[k] = rcpt[k];
 		out = compose_for_smtp(raw, len, &sl);
-		status("%s: sending \"%s\"...", a->name, h->subject);
+		prog_start(1, sl, 0, "%s: sending %s of %s, \"%.24s\"", a->name,
+			   num(nsend - i), num(nsend), h->subject);
 		r = smtp_send(s, a->email, rp, n, out, sl);
+		prog_end();
 		if (r <= 0) {
 			snprintf(mail_err, sizeof(mail_err), "Sending \"%.40s\" failed: %s", h->subject, s->err);
 			free(raw);
@@ -964,7 +1064,9 @@ int mail_send_outbox(ACCOUNT *a, int *sent)
 			local_copy(f, h, sentf);
 		} else if (sentf && !str_istr(acct_host(a, 1), "gmail") && !str_istr(acct_host(a, 0), "gmail") &&
 			   mail_connect(a)) {
+			prog_start(1, sl, 0, "%s: saving a copy in %s", a->name, sentf->disp);
 			imap_append(a->im, sentf->server, MF_SEEN, out, sl);
+			prog_end();
 		}
 		free(raw);
 		free(out);

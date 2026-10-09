@@ -76,7 +76,8 @@ const char *conn_security(CONN *c)
 {
 	return c && c->tls ? tls_describe(c->tls) : "";
 }
-long conn_bytes;
+long conn_bytes, conn_bytes_out;
+void (*conn_tick)(void);
 
 /* the log is written in blocks: opening the file for every line made a
    big download crawl on an Atari disk. Milestones (" -- ", " !! ")
@@ -202,9 +203,18 @@ void conn_log_login(const char *who, const char *user, const char *pass)
 
 int conn_write(CONN *c, const char *data, long n)
 {
-	if ((c->tls ? tls_write(c->tls, data, n) : net_write(c->h, data, n)) != n) {
-		str_copy(c->err, "connection lost while sending", sizeof(c->err));
-		return 0;
+	/* in pieces, so a long upload can show how far it got */
+	while (n > 0) {
+		long k = n > 4096 ? 4096 : n;
+		if ((c->tls ? tls_write(c->tls, data, k) : net_write(c->h, data, k)) != k) {
+			str_copy(c->err, "connection lost while sending", sizeof(c->err));
+			return 0;
+		}
+		data += k;
+		n -= k;
+		conn_bytes_out += k;
+		if (conn_tick)
+			conn_tick();
 	}
 	return 1;
 }
@@ -256,6 +266,8 @@ static int fill(CONN *c)
 		if (r > 0) {
 			c->len = r;
 			conn_bytes += r;
+			if (conn_tick)
+				conn_tick();
 			return 1;
 		}
 		if (r < 0) {
