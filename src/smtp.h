@@ -14,7 +14,7 @@ typedef struct {
 } SMTP;
 
 /* user may be empty for servers (or a gateway) that need no login */
-SMTP *smtp_open(const char *host, unsigned short port, const char *helo,
+SMTP *smtp_open(const char *host, unsigned short port, int sec, const char *helo,
 		const char *user, const char *pass, char *err, int errlen);
 /* rcpts: n bare addresses */
 int   smtp_send(SMTP *s, const char *from, const char **rcpts, int n,

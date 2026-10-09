@@ -5,15 +5,17 @@ It speaks EHLO, AUTH PLAIN/LOGIN, MAIL, RCPT, DATA, RSET, QUIT and
 delivers each message into the Dovecot Maildir of a local test user
 (so the test can read it back over IMAP), or into DIR/sink otherwise.
 
-    smtp_server.py PORT DIR USER PASSWORD [CERT KEY]
+    smtp_server.py PORT DIR USER PASSWORD [CERT KEY [starttls]]
 
 With CERT and KEY it speaks SMTP over TLS from the first byte (port 465
-style), to test the Raspberry Pi gateway.
+style), to test the Raspberry Pi gateway; with "starttls" as well it
+starts plain and offers STARTTLS (port 587 style), for Falcon mode.
 """
 import base64, os, socketserver, ssl, sys, time
 
 PORT, DIR, USER, PASS = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
 TLS = None
+STARTTLS = len(sys.argv) > 7 and sys.argv[7] == "starttls"
 if len(sys.argv) > 6:
     TLS = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     TLS.load_cert_chain(sys.argv[5], sys.argv[6])
@@ -34,7 +36,9 @@ def deliver(rcpt, data):
 
 class H(socketserver.StreamRequestHandler):
     def setup(self):
-        if TLS:
+        self.secure = False
+        if TLS and not STARTTLS:
+            self.secure = True
             self.request = TLS.wrap_socket(self.request, server_side=True)
         super().setup()
 
@@ -50,8 +54,19 @@ class H(socketserver.StreamRequestHandler):
                 return
             cmd = line.decode("latin-1").rstrip("\r\n")
             up = cmd.upper()
+            if up == "STARTTLS" and STARTTLS and not self.secure:
+                self.out("220 go ahead")
+                self.wfile.flush()
+                self.connection = TLS.wrap_socket(self.connection, server_side=True)
+                self.request = self.connection
+                self.rfile = self.connection.makefile("rb")
+                self.wfile = self.connection.makefile("wb", buffering=0)
+                self.secure, authed, rcpts = True, False, []
+                continue
             if up.startswith("EHLO"):
                 self.out("250-test.local")
+                if STARTTLS and not self.secure:
+                    self.out("250-STARTTLS")
                 self.out("250-8BITMIME")
                 self.out("250 AUTH PLAIN LOGIN")
             elif up.startswith("HELO"):

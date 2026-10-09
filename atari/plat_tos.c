@@ -98,6 +98,54 @@ unsigned long pf_ms(void)
 	return tos_hz200() * 5;
 }
 
+/* Timer jitter: the MFP's timer C counts every 26 us and the video
+ * chip's line counter every 32 us; read in a loop whose length depends
+ * on the previous readings, they drift against the CPU clock, the bus
+ * and interrupts. Each byte folds in several readings. */
+#pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
+static unsigned char *ent_buf;
+static int ent_n;
+
+static void sup_entropy(void)
+{
+	volatile unsigned char *tcdr = (volatile unsigned char *)0xfffffa23L;
+	volatile unsigned long *hz200 = (volatile unsigned long *)0x4baL;
+	unsigned long acc = *hz200;
+	int i, k;
+	for (i = 0; i < ent_n; i++) {
+		for (k = 0; k < 8; k++) {
+			volatile int spin, j = (int)(acc & 31) + 8;
+			for (spin = 0; spin < j; spin++)
+				;
+			acc = (acc << 5) ^ (acc >> 27) ^ *tcdr ^ (*hz200 << 3);
+		}
+		ent_buf[i] ^= (unsigned char)(acc ^ (acc >> 8) ^ (acc >> 16) ^ (acc >> 24));
+	}
+}
+
+void pf_entropy(unsigned char *buf, int n)
+{
+	int i;
+	unsigned short d = (unsigned short)Tgetdate(), tm = (unsigned short)Tgettime();
+	for (i = 0; i < n; i++)
+		buf[i] = (unsigned char)(i * 151);
+	buf[0] ^= (unsigned char)tm;
+	buf[1] ^= (unsigned char)(tm >> 8);
+	buf[2] ^= (unsigned char)d;
+	buf[3] ^= (unsigned char)(d >> 8);
+	ent_buf = buf;
+	ent_n = n;
+	Supexec(sup_entropy);
+	/* XBIOS Random(), and where the stack happens to be */
+	for (i = 0; i + 2 < n; i += 3) {
+		unsigned long r = (unsigned long)trap14_w(17);
+		buf[i] ^= (unsigned char)r;
+		buf[i + 1] ^= (unsigned char)(r >> 8);
+		buf[i + 2] ^= (unsigned char)(r >> 16);
+	}
+	buf[n - 1] ^= (unsigned char)((unsigned long)&i >> 3);
+}
+
 void pf_debug(const char *s)
 {
 	nf_debug(s);

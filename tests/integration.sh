@@ -7,6 +7,10 @@
 # servers only speak TLS (IMAPS, POP3S, SMTP on 465 style) and stunnel,
 # configured like gateway/install.sh does, offers the plain ports MAIL
 # uses. Needs stunnel4 and openssl.
+#
+# FALCON=1 tests Falcon mode: MAIL speaks TLS itself (BearSSL), to the
+# TLS-only ports (IMAP and SMTP of the first account) and with STARTTLS
+# on the plain ports (POP3 STLS and SMTP STARTTLS of the second).
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CLI=$ROOT/build/mail-cli
@@ -17,13 +21,17 @@ PASS=0; FAIL=0
 RUN=$(mktemp -d /tmp/tdv.XXXXXX)   # short: Unix socket paths are limited
 mkdir -p "$D"/{state,home/dana/Maildir/{new,cur,tmp},work}
 echo "dana:{PLAIN}secret" > "$D/users"
+[ -n "${FALCON:-}" ] && TLS=1
 if [ -n "${TLS:-}" ]; then
   # servers on TLS-only ports, stunnel in front as on the Pi
   openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=localhost \
     -addext subjectAltName=DNS:localhost -keyout "$D/key.pem" -out "$D/cert.pem" 2>/dev/null
   chmod 644 "$D/key.pem"
   S_IMAP=0; S_POP3=0; S_SMTP=$((SMTP + 440))
-  sed -e "s|@RUN@|$RUN|g" -e "s|@DIR@|$D|g" -e "s|@IMAP@|0|" -e "s|@POP3@|0|" \
+  # Falcon mode keeps the plain ports too, where Dovecot offers STARTTLS
+  P_IMAP=0; P_POP3=0
+  [ -n "${FALCON:-}" ] && { P_IMAP=$IMAP; P_POP3=$POP3; }
+  sed -e "s|@RUN@|$RUN|g" -e "s|@DIR@|$D|g" -e "s|@IMAP@|$P_IMAP|" -e "s|@POP3@|$P_POP3|" \
       -e "s|@UID@|$(id -u nobody)|" -e "s|@GID@|$(id -g nobody)|" \
       -e "s|^ssl = no|ssl = yes\nssl_cert = <$D/cert.pem\nssl_key = <$D/key.pem|" \
       "$ROOT/tests/dovecot.conf.in" > "$D/dovecot.conf"
@@ -57,7 +65,9 @@ accept = 127.0.0.1:$POP3
 connect = localhost:$((POP3 + 885))
 checkHost = localhost
 CONF
+  if [ -n "${FALCON:-}" ]; then TUNPID=; else
   stunnel "$D/stunnel.conf" 2>"$D/stunnel.log" & TUNPID=$!
+  fi
 else
   S_SMTP=$SMTP
   sed -e "s|@RUN@|$RUN|g" -e "s|@DIR@|$D|g" -e "s|@IMAP@|$IMAP|" -e "s|@POP3@|$POP3|" \
@@ -68,6 +78,9 @@ chmod 755 "$D"
 dovecot -c "$D/dovecot.conf" || { echo "can't start dovecot"; exit 1; }
 if [ -n "${TLS:-}" ]; then
   python3 "$ROOT/tests/smtp_server.py" $S_SMTP "$D" dana secret "$D/cert.pem" "$D/key.pem" & SMTPPID=$!
+  if [ -n "${FALCON:-}" ]; then
+    python3 "$ROOT/tests/smtp_server.py" $SMTP "$D" dana secret "$D/cert.pem" "$D/key.pem" starttls & SMTPPID="$SMTPPID $!"
+  fi
 else
   python3 "$ROOT/tests/smtp_server.py" $S_SMTP "$D" dana secret & SMTPPID=$!
 fi
@@ -107,8 +120,26 @@ leave=1
 smtphost=127.0.0.1
 smtpport=$SMTP
 INF
+if [ -n "${FALCON:-}" ]; then
+  # Falcon mode: MAIL talks TLS to the servers itself; the test
+  # certificate is the only root it trusts
+  cp "$D/cert.pem" "$W/CACERT.PEM"
+  python3 - "$W/MAIL.INF" $((IMAP + 850)) $S_SMTP $POP3 $SMTP <<'PY'
+import sys
+p, imaps, smtps, pop3, smtp = sys.argv[1:]
+s = open(p).read()
+s = s.replace("[options]\n", "[options]\nfalcon=1\nlog=1\n", 1)
+a, b = s.split("[account]\n")[1:]
+a += "dhost=localhost\ndport=%s\ndsec=1\ndsmtphost=localhost\ndsmtpport=%s\ndsmtpsec=1\n" % (imaps, smtps)
+b += "dhost=localhost\ndport=%s\ndsec=2\ndsmtphost=localhost\ndsmtpport=%s\ndsmtpsec=2\n" % (pop3, smtp)
+open(p, "w").write(s.split("[account]\n")[0] + "[account]\n" + a + "[account]\n" + b)
+PY
+fi
 
 run() { ASAN_OPTIONS=detect_leaks=0 "$CLI" "$W" "$@" 2>&1; }
+# Falcon mode checks certificate dates against the clock and tz=180: the
+# local clock must be UTC+3 too, as on an Atari set to Israeli time
+[ -n "${FALCON:-}" ] && export TZ=Etc/GMT-3 MAIL_LOG=1
 expect() {  # expect DESCRIPTION PATTERN OUTPUT
   if grep -q -- "$2" <<<"$3"; then PASS=$((PASS+1)); echo "ok   $1"
   else FAIL=$((FAIL+1)); echo "FAIL $1"; echo "     wanted: $2"; sed 's/^/     | /' <<<"$3"; fi
@@ -240,5 +271,49 @@ out=$(run delete 2 Inbox "$P1")
 out=$(run list 2 Trash)
 expect "POP3 delete goes to the local Trash" "תשובה" "$out"
 
+if [ -n "${FALCON:-}" ]; then
+  out=$(run send 2 "$W/msg.txt")
+  expect "message sent with SMTP STARTTLS" "sent: 1" "$out"
+
+  # IMAP STARTTLS on the plain port
+  cp "$W/MAIL.INF" "$W/MAIL.INF.keep"
+  sed -i "0,/^dport=.*/s//dport=$IMAP/; 0,/^dsec=1/s//dsec=2/" "$W/MAIL.INF"
+  out=$(run folders 1)
+  expect "IMAP STARTTLS" "^Sent " "$out"
+  grep -q "^IMAP >> T[0-9]* STARTTLS" "$W/MAIL.LOG" && { PASS=$((PASS+1)); echo "ok   IMAP sent STARTTLS"; } || { FAIL=$((FAIL+1)); echo "FAIL IMAP STARTTLS not in the log"; }
+  cp "$W/MAIL.INF.keep" "$W/MAIL.INF"
+
+  # a server whose certificate no trusted authority signed
+  openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=other -keyout "$D/k2.pem" -out "$D/c2.pem" 2>/dev/null
+  cp "$W/CACERT.PEM" "$W/CACERT.keep"; cp "$D/c2.pem" "$W/CACERT.PEM"
+  out=$(run folders 1)
+  expect "unknown authority refused, in words" "isn't signed by any authority in CACERT.PEM" "$out"
+  cp "$W/CACERT.keep" "$W/CACERT.PEM"
+
+  # a server with only an ECDSA certificate: refused for RSA-only, then accepted
+  openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 2 -subj /CN=localhost \
+    -addext subjectAltName=DNS:localhost -keyout "$D/eck.pem" -out "$D/ecc.pem" 2>/dev/null
+  chmod 644 "$D/eck.pem"
+  cat "$D/ecc.pem" >> "$W/CACERT.PEM"
+  python3 "$ROOT/tests/smtp_server.py" $((SMTP + 441)) "$D" dana secret "$D/ecc.pem" "$D/eck.pem" & SMTPPID="$SMTPPID $!"
+  sleep 1
+  sed -i "0,/^dsmtpport=.*/s//dsmtpport=$((SMTP + 441))/" "$W/MAIL.INF"
+  out=$(run send 1 "$W/msg.txt")
+  expect "ECDSA-only server: sent after the retry" "sent: 1" "$out"
+  grep -q "^SMTP -- secure: TLS 1.2, ECDHE-ECDSA" "$W/MAIL.LOG" && { PASS=$((PASS+1)); echo "ok   ECDSA certificate accepted on the second try"; } || { FAIL=$((FAIL+1)); echo "FAIL no ECDSA session"; }
+  cp "$W/MAIL.INF.keep" "$W/MAIL.INF"
+  # every protocol went over MAIL's own TLS, both ways of starting it
+  for p in IMAP POP3 SMTP; do
+    if grep -q "^$p -- secure: TLS 1.2" "$W/MAIL.LOG" 2>/dev/null; then PASS=$((PASS+1)); echo "ok   $p over TLS: $(grep -m1 "^$p -- secure" "$W/MAIL.LOG" | cut -c17-)"
+    else FAIL=$((FAIL+1)); echo "FAIL $p not over TLS"; fi
+  done
+  if grep -q "^IMAP >> T[0-9]* STARTTLS\|^POP3 >> STLS" "$W/MAIL.LOG" && grep -q "^SMTP >> STARTTLS" "$W/MAIL.LOG"; then
+    PASS=$((PASS+1)); echo "ok   STARTTLS used where asked"
+  else FAIL=$((FAIL+1)); echo "FAIL STARTTLS not used"; fi
+  if grep -q " >> .*\(LOGIN\|AUTH\|PASS\)" "$W/MAIL.LOG" && ! grep -q "secret" "$W/MAIL.LOG"; then
+    PASS=$((PASS+1)); echo "ok   password not in the log"
+  else FAIL=$((FAIL+1)); echo "FAIL password check in the log"; fi
+  [ -s "$W/MAIL/SEED.DAT" ] && { PASS=$((PASS+1)); echo "ok   random seed kept"; } || { FAIL=$((FAIL+1)); echo "FAIL no random seed"; }
+fi
 echo "$PASS passed, $FAIL failed"
 [ $FAIL -eq 0 ]

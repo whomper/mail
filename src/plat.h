@@ -43,6 +43,9 @@ typedef struct {
 void pf_now(PFTIME *t);		/* local wall clock */
 unsigned long pf_ms(void);	/* monotonic milliseconds (5 ms steps on TOS) */
 void pf_debug(const char *s);	/* emulator console / stderr */
+/* raw unpredictable bytes (timer jitter on the Atari, /dev/urandom on
+   Linux); tls.c hashes them with a seed kept on disk */
+void pf_entropy(unsigned char *buf, int n);
 
 /* ---- TCP ---- */
 int  net_init(void);			/* 1 if a TCP/IP stack is present */

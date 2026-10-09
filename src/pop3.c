@@ -19,8 +19,8 @@ static int reply(POP3 *p)
 	return 0;
 }
 
-POP3 *pop3_login(const char *host, unsigned short port, const char *user,
-		 const char *pass, char *err, int errlen)
+static POP3 *login_once(const char *host, unsigned short port, int sec, const char *user,
+			const char *pass, char *err, int errlen)
 {
 	POP3 *p = calloc(1, sizeof(POP3));
 	int r;
@@ -29,7 +29,7 @@ POP3 *pop3_login(const char *host, unsigned short port, const char *user,
 		return 0;
 	}
 	sb_init(&p->line);
-	p->c = conn_open("POP3", host, port, err, errlen);
+	p->c = conn_open("POP3", host, port, sec, err, errlen);
 	if (!p->c) {
 		free(p);
 		return 0;
@@ -38,6 +38,20 @@ POP3 *pop3_login(const char *host, unsigned short port, const char *user,
 		snprintf(err, errlen, "%s did not greet as a POP3 server", host);
 		pop3_quit(p);
 		return 0;
+	}
+	if (sec == SEC_STARTTLS) {
+		conn_cmd(p->c, 0, "STLS");
+		if (reply(p) <= 0) {
+			snprintf(err, errlen, "%s doesn't offer STLS: use port 995", host);
+			pop3_quit(p);
+			return 0;
+		}
+		if (!conn_starttls(p->c, host, err, errlen)) {
+			conn_close(p->c);
+			p->c = 0;
+			pop3_quit(p);
+			return 0;
+		}
 	}
 	conn_cmd(p->c, 1, "USER %s", user);
 	r = reply(p);
@@ -64,6 +78,15 @@ POP3 *pop3_login(const char *host, unsigned short port, const char *user,
 		pop3_quit(p);
 		return 0;
 	}
+	return p;
+}
+
+POP3 *pop3_login(const char *host, unsigned short port, int sec, const char *user,
+		 const char *pass, char *err, int errlen)
+{
+	POP3 *p = login_once(host, port, sec, user, pass, err, errlen);
+	if (!p && sec == SEC_STARTTLS && conn_tls_retry)
+		p = login_once(host, port, sec, user, pass, err, errlen);
 	return p;
 }
 

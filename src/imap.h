@@ -49,7 +49,7 @@ typedef struct {
 	long bodylen;
 } IMAPFETCH;
 
-IMAP *imap_login(const char *host, unsigned short port, const char *user,
+IMAP *imap_login(const char *host, unsigned short port, int sec, const char *user,
 		 const char *pass, char *err, int errlen);
 void  imap_logout(IMAP *im);
 int   imap_has(IMAP *im, const char *cap);

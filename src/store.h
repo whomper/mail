@@ -44,6 +44,12 @@ typedef struct {
 	char smtpuser[96], smtppass[64];	/* empty user: same as above; "-": no login */
 	char sentname[96];	/* IMAP Sent folder override */
 	char signature[256];	/* \n separated, Atari charset */
+	/* Falcon mode: the provider's own servers, reached with TLS */
+	char dhost[64];
+	unsigned short dport;
+	char dsmtphost[64];
+	unsigned short dsmtpport;
+	short dsec, dsmtpsec;	/* 0: by the port (993/995/465 TLS, else STARTTLS) */
 
 	/* runtime */
 	short id;		/* 1..MAXACCT */
@@ -73,6 +79,7 @@ typedef struct {
 	short ed_x, ed_y, ed_w, ed_h;		/* the editor window */
 	short font_id, font_pt;	/* text font: VDI font id (1 = system) and size */
 	short hebfont;		/* where the font has its Hebrew letters: HEB_* */
+	short falcon;		/* Falcon mode: TLS on the Atari (and its DSP), no gateway */
 	char workdir[200];
 } OPTIONS;
 
@@ -104,6 +111,13 @@ extern short naccts;
 int  store_init(const char *workdir);	/* loads MAIL.INF (creates dirs) */
 int  store_save_settings(void);
 ACCOUNT *acct_new(void);
+/* the servers in use: the gateway's (plain), or in Falcon mode the
+   provider's (TLS). smtp: 0 incoming, 1 outgoing */
+const char *acct_host(ACCOUNT *a, int smtp);
+unsigned short acct_port(ACCOUNT *a, int smtp);
+int acct_sec(ACCOUNT *a, int smtp);		/* SEC_* (conn.h) */
+/* fill in a provider's direct servers from the e-mail address; 1 if known */
+int acct_preset(ACCOUNT *a);
 void acct_delete(ACCOUNT *a);
 void acct_dirs(ACCOUNT *a);
 

@@ -53,8 +53,8 @@ static int has_auth(SMTP *s, const char *mech)
 	return 0;
 }
 
-SMTP *smtp_open(const char *host, unsigned short port, const char *helo,
-		const char *user, const char *pass, char *err, int errlen)
+static SMTP *open_once(const char *host, unsigned short port, int sec, const char *helo,
+		       const char *user, const char *pass, char *err, int errlen)
 {
 	SMTP *s = calloc(1, sizeof(SMTP));
 	int code;
@@ -63,7 +63,7 @@ SMTP *smtp_open(const char *host, unsigned short port, const char *helo,
 		return 0;
 	}
 	sb_init(&s->line);
-	s->c = conn_open("SMTP", host, port, err, errlen);
+	s->c = conn_open("SMTP", host, port, sec, err, errlen);
 	if (!s->c) {
 		free(s);
 		return 0;
@@ -76,6 +76,28 @@ SMTP *smtp_open(const char *host, unsigned short port, const char *helo,
 	}
 	conn_cmd(s->c, 0, "EHLO %s", helo);
 	code = reply(s, 1);
+	if (sec == SEC_STARTTLS) {
+		if (code != 250 || !strstr(s->ext, "STARTTLS")) {
+			snprintf(err, errlen, "%s doesn't offer STARTTLS: use port 465", host);
+			smtp_quit(s);
+			return 0;
+		}
+		conn_cmd(s->c, 0, "STARTTLS");
+		if (reply(s, 0) != 220) {
+			snprintf(err, errlen, "STARTTLS refused: %s", s->err);
+			smtp_quit(s);
+			return 0;
+		}
+		if (!conn_starttls(s->c, host, err, errlen)) {
+			conn_close(s->c);
+			s->c = 0;
+			smtp_quit(s);
+			return 0;
+		}
+		/* start over inside TLS */
+		conn_cmd(s->c, 0, "EHLO %s", helo);
+		code = reply(s, 1);
+	}
 	if (code != 250) {
 		conn_cmd(s->c, 0, "HELO %s", helo);
 		if (reply(s, 0) != 250) {
@@ -119,6 +141,15 @@ SMTP *smtp_open(const char *host, unsigned short port, const char *helo,
 			return 0;
 		}
 	}
+	return s;
+}
+
+SMTP *smtp_open(const char *host, unsigned short port, int sec, const char *helo,
+		const char *user, const char *pass, char *err, int errlen)
+{
+	SMTP *s = open_once(host, port, sec, helo, user, pass, err, errlen);
+	if (!s && sec == SEC_STARTTLS && conn_tls_retry)
+		s = open_once(host, port, sec, helo, user, pass, err, errlen);
 	return s;
 }
 

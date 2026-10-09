@@ -13,7 +13,7 @@ typedef struct {
 	SBUF line;
 } POP3;
 
-POP3 *pop3_login(const char *host, unsigned short port, const char *user,
+POP3 *pop3_login(const char *host, unsigned short port, int sec, const char *user,
 		 const char *pass, char *err, int errlen);
 void  pop3_quit(POP3 *p);
 int   pop3_stat(POP3 *p, long *count, long *size);

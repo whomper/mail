@@ -11,6 +11,8 @@
 #include "charset.h"
 #include "mime.h"
 #include "util.h"
+#include "conn.h"
+#include "tls.h"
 
 OPTIONS opt;
 ACCOUNT *accts[MAXACCT];
@@ -104,6 +106,76 @@ ACCOUNT *acct_new(void)
 	return a;
 }
 
+const char *acct_host(ACCOUNT *a, int smtp)
+{
+	if (opt.falcon) {
+		if (smtp && a->dsmtphost[0])
+			return a->dsmtphost;
+		return a->dhost;
+	}
+	if (smtp && a->smtphost[0])
+		return a->smtphost;
+	return a->host;
+}
+
+unsigned short acct_port(ACCOUNT *a, int smtp)
+{
+	if (opt.falcon)
+		return smtp ? (a->dsmtpport ? a->dsmtpport : 465) : (a->dport ? a->dport : (a->pop ? 995 : 993));
+	return smtp ? a->smtpport : a->port;
+}
+
+int acct_sec(ACCOUNT *a, int smtp)
+{
+	unsigned short p;
+	short s;
+	if (!opt.falcon)
+		return SEC_PLAIN;
+	s = smtp ? a->dsmtpsec : a->dsec;
+	if (s)
+		return s;
+	p = acct_port(a, smtp);
+	return p == 993 || p == 995 || p == 465 ? SEC_TLS : SEC_STARTTLS;
+}
+
+/* the big providers' servers, for Falcon mode */
+static const struct {
+	const char *domains, *in, *out;
+	unsigned short inport, outport;
+} presets[] = {
+	{ " gmail.com googlemail.com ", "imap.gmail.com", "smtp.gmail.com", 993, 465 },
+	{ " icloud.com me.com mac.com ", "imap.mail.me.com", "smtp.mail.me.com", 993, 587 },
+	{ " yahoo.com ymail.com ", "imap.mail.yahoo.com", "smtp.mail.yahoo.com", 993, 465 },
+	{ " gmx.net gmx.de gmx.com ", "imap.gmx.net", "mail.gmx.net", 993, 465 },
+	{ " web.de ", "imap.web.de", "smtp.web.de", 993, 587 },
+	{ " aol.com ", "imap.aol.com", "smtp.aol.com", 993, 465 },
+	{ " fastmail.com fastmail.fm ", "imap.fastmail.com", "smtp.fastmail.com", 993, 465 },
+	{ " zoho.com ", "imap.zoho.com", "smtp.zoho.com", 993, 465 },
+};
+
+int acct_preset(ACCOUNT *a)
+{
+	const char *at = strrchr(a->email, '@');
+	char key[80];
+	unsigned i;
+	if (!at)
+		return 0;
+	snprintf(key, sizeof(key), " %s ", at + 1);
+	for (i = 0; key[i]; i++)
+		key[i] = (char)tolower((unsigned char)key[i]);
+	for (i = 0; i < sizeof(presets) / sizeof(presets[0]); i++) {
+		if (!strstr(presets[i].domains, key))
+			continue;
+		str_copy(a->dhost, presets[i].in, sizeof(a->dhost));
+		a->dport = presets[i].inport;
+		str_copy(a->dsmtphost, presets[i].out, sizeof(a->dsmtphost));
+		a->dsmtpport = presets[i].outport;
+		a->dsec = a->dsmtpsec = 0;
+		return 1;
+	}
+	return 0;
+}
+
 void acct_dirs(ACCOUNT *a)
 {
 	char name[16];
@@ -147,6 +219,12 @@ static void set_acct(ACCOUNT *a, const char *k, const char *v)
 	else if (!strcmp(k, "smtppass")) str_copy(a->smtppass, tmp, sizeof(a->smtppass));
 	else if (!strcmp(k, "sent")) str_copy(a->sentname, tmp, sizeof(a->sentname));
 	else if (!strcmp(k, "signature")) str_copy(a->signature, tmp, sizeof(a->signature));
+	else if (!strcmp(k, "dhost")) str_copy(a->dhost, tmp, sizeof(a->dhost));
+	else if (!strcmp(k, "dport")) a->dport = (unsigned short)atoi(tmp);
+	else if (!strcmp(k, "dsmtphost")) str_copy(a->dsmtphost, tmp, sizeof(a->dsmtphost));
+	else if (!strcmp(k, "dsmtpport")) a->dsmtpport = (unsigned short)atoi(tmp);
+	else if (!strcmp(k, "dsec")) a->dsec = (short)atoi(tmp);
+	else if (!strcmp(k, "dsmtpsec")) a->dsmtpsec = (short)atoi(tmp);
 }
 
 static void set_opt(const char *k, const char *v)
@@ -164,6 +242,7 @@ static void set_opt(const char *k, const char *v)
 	else if (!strcmp(k, "panes")) shorts(v, &opt.pane_w, 2);
 	else if (!strcmp(k, "editor")) shorts(v, &opt.ed_x, 4);
 	else if (!strcmp(k, "font")) shorts(v, &opt.font_id, 2);
+	else if (!strcmp(k, "falcon")) opt.falcon = n != 0;
 	else if (!strcmp(k, "bridgeorder")) cs_bridge_visual = n != 0;
 	else if (!strcmp(k, "hebfont")) opt.hebfont = n >= 0 && n <= 2 ? n : 0;
 }
@@ -179,6 +258,10 @@ int store_init(const char *workdir)
 	path_join(inf_path, sizeof(inf_path), workdir, "MAIL.INF");
 	path_join(mail_dir, sizeof(mail_dir), workdir, "MAIL");
 	pf_mkdir(mail_dir);
+	/* Falcon mode: the root certificates next to MAIL.PRG, the random
+	   seed with the mail */
+	path_join(conn_cacert, sizeof(conn_cacert), workdir, "CACERT.PEM");
+	path_join(tls_seed_path, sizeof(tls_seed_path), mail_dir, "SEED.DAT");
 
 	buf = pf_load(inf_path, 0);
 	if (!buf)
@@ -218,6 +301,7 @@ int store_init(const char *workdir)
 		}
 	}
 	free(buf);
+	tls_tz_minutes = opt.tz;
 	return naccts;
 }
 
@@ -235,6 +319,7 @@ int store_save_settings(void)
 	SBUF b;
 	short i;
 	int r;
+	tls_tz_minutes = opt.tz;
 	sb_init(&b);
 	sb_adds(&b, "; MAIL settings, written by MAIL.PRG. Lines starting with ; are notes.\r\n"
 		    "; Most of these are set in Options > Settings; see docs/GUIDE.md.\r\n"
@@ -267,6 +352,9 @@ int store_save_settings(void)
 	note(&b, "where the screen font has its Hebrew letters: 0 = Atari (standard TOS font),");
 	note(&b, "1 = ISO-8859-8 places (Israeli Hebrew fonts), 2 = DOS 862 places; set in Options > Font");
 	sb_printf(&b, "hebfont=%d\r\n", opt.hebfont);
+	note(&b, "1 = Falcon mode: MAIL connects to the mail providers itself, with TLS (the");
+	note(&b, "DSP checks signatures); 0 = through the Raspberry Pi gateway. Options > Settings");
+	sb_printf(&b, "falcon=%d\r\n", opt.falcon);
 	note(&b, "1 = Hebrew that arrives already in Atari characters (from a bridge made for");
 	note(&b, "Troll) is in display order: turn it back into reading order; set in Options > Settings");
 	sb_printf(&b, "bridgeorder=%d\r\n", cs_bridge_visual);
@@ -312,6 +400,15 @@ int store_save_settings(void)
 		sb_adds(&b, "sent=");
 		escape(&b, a->sentname);
 		sb_adds(&b, "\r\n");
+		note(&b, "Falcon mode: the provider's own servers and ports; 993/995/465 are TLS,");
+		note(&b, "other ports STARTTLS (dsec/dsmtpsec 1 = TLS, 2 = STARTTLS overrides)");
+		sb_adds(&b, "dhost=");
+		escape(&b, a->dhost);
+		sb_printf(&b, "\r\ndport=%u\r\ndsmtphost=", a->dport);
+		escape(&b, a->dsmtphost);
+		sb_printf(&b, "\r\ndsmtpport=%u\r\n", a->dsmtpport);
+		if (a->dsec || a->dsmtpsec)
+			sb_printf(&b, "dsec=%d\r\ndsmtpsec=%d\r\n", a->dsec, a->dsmtpsec);
 		note(&b, "added below new messages; \\n starts a new line (| in the account dialog)");
 		sb_adds(&b, "signature=");
 		escape(&b, a->signature);

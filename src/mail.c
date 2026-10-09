@@ -82,8 +82,10 @@ int mail_connect(ACCOUNT *a)
 		}
 		mail_disconnect(a);
 	}
-	status("%s: connecting to %s...", a->name, a->host);
-	a->im = imap_login(a->host, a->port, a->user, a->pass, mail_err, sizeof(mail_err));
+	status(acct_sec(a, 0) ? "%s: connecting securely to %s..." : "%s: connecting to %s...",
+	       a->name, acct_host(a, 0));
+	a->im = imap_login(acct_host(a, 0), acct_port(a, 0), acct_sec(a, 0), a->user, a->pass,
+			   mail_err, sizeof(mail_err));
 	if (!a->im)
 		return 0;
 	a->im_used = pf_ms();
@@ -468,8 +470,10 @@ static int pop_check(ACCOUNT *a, long *newmsgs)
 		return 0;
 	memset(&c, 0, sizeof(c));
 	c.a = a;
-	status("%s: connecting to %s...", a->name, a->host);
-	c.p = pop3_login(a->host, a->port, a->user, a->pass, mail_err, sizeof(mail_err));
+	status(acct_sec(a, 0) ? "%s: connecting securely to %s..." : "%s: connecting to %s...",
+	       a->name, acct_host(a, 0));
+	c.p = pop3_login(acct_host(a, 0), acct_port(a, 0), acct_sec(a, 0), a->user, a->pass,
+			 mail_err, sizeof(mail_err));
 	if (!c.p)
 		return 0;
 	c.f = fold_open(a, inbox);
@@ -794,8 +798,9 @@ int mail_send_outbox(ACCOUNT *a, int *sent)
 		const char *at = strchr(a->email, '@');
 		str_copy(helo, at ? at + 1 : "atari.local", sizeof(helo));
 	}
-	status("%s: connecting to %s...", a->name, a->smtphost[0] ? a->smtphost : a->host);
-	s = smtp_open(a->smtphost[0] ? a->smtphost : a->host, a->smtpport, helo, user, pass,
+	status(acct_sec(a, 1) ? "%s: connecting securely to %s..." : "%s: connecting to %s...",
+	       a->name, acct_host(a, 1));
+	s = smtp_open(acct_host(a, 1), acct_port(a, 1), acct_sec(a, 1), helo, user, pass,
 		      mail_err, sizeof(mail_err));
 	if (!s) {
 		fold_close(f);

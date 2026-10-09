@@ -277,8 +277,8 @@ static int run(IMAP *im, int secret, UNTAGGED cb, void *ud, const char *fmt, ...
 	}
 }
 
-IMAP *imap_login(const char *host, unsigned short port, const char *user,
-		 const char *pass, char *err, int errlen)
+static IMAP *login_once(const char *host, unsigned short port, int sec, const char *user,
+			const char *pass, char *err, int errlen)
 {
 	IMAP *im = calloc(1, sizeof(IMAP));
 	int r;
@@ -288,7 +288,7 @@ IMAP *imap_login(const char *host, unsigned short port, const char *user,
 	}
 	sb_init(&im->resp);
 	im->delim = '/';
-	im->c = conn_open("IMAP", host, port, err, errlen);
+	im->c = conn_open("IMAP", host, port, sec, err, errlen);
 	if (!im->c) {
 		free(im);
 		return 0;
@@ -308,6 +308,31 @@ IMAP *imap_login(const char *host, unsigned short port, const char *user,
 		str_copy(err, im->err, errlen);
 		imap_logout(im);
 		return 0;
+	}
+	if (sec == SEC_STARTTLS) {
+		if (!imap_has(im, "STARTTLS")) {
+			snprintf(err, errlen, "%s doesn't offer STARTTLS: use port 993", host);
+			imap_logout(im);
+			return 0;
+		}
+		if (run(im, 0, 0, 0, "STARTTLS") <= 0) {
+			snprintf(err, errlen, "STARTTLS refused: %s", im->err);
+			imap_logout(im);
+			return 0;
+		}
+		if (!conn_starttls(im->c, host, err, errlen)) {
+			conn_close(im->c);	/* no LOGOUT on a broken handshake */
+			im->c = 0;
+			imap_logout(im);
+			return 0;
+		}
+		/* what was said before TLS can't be trusted: ask again */
+		im->caps[0] = 0;
+		if (run(im, 0, 0, 0, "CAPABILITY") < 0) {
+			str_copy(err, im->err, errlen);
+			imap_logout(im);
+			return 0;
+		}
 	}
 
 	if (imap_has(im, "AUTH=PLAIN") && (imap_has(im, "LOGINDISABLED") || has_8bit(pass, strlen(pass)) ||
@@ -359,6 +384,16 @@ IMAP *imap_login(const char *host, unsigned short port, const char *user,
 	/* some servers only list their full capabilities after login */
 	if (!imap_has(im, "IMAP4REV1") || !strstr(im->caps, "UIDPLUS"))
 		run(im, 0, 0, 0, "CAPABILITY");
+	return im;
+}
+
+IMAP *imap_login(const char *host, unsigned short port, int sec, const char *user,
+		 const char *pass, char *err, int errlen)
+{
+	IMAP *im = login_once(host, port, sec, user, pass, err, errlen);
+	/* a server with only an ECDSA certificate: once more, accepting it */
+	if (!im && sec == SEC_STARTTLS && conn_tls_retry)
+		im = login_once(host, port, sec, user, pass, err, errlen);
 	return im;
 }
 

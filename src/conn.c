@@ -7,8 +7,69 @@
 #include <stdarg.h>
 #include "plat.h"
 #include "conn.h"
+#include "tls.h"
 
 char conn_logfile[200];
+char conn_cacert[200];
+int conn_tls_retry;
+
+/* servers that only have ECDSA certificates: later connections offer it
+   at once instead of asking for RSA first */
+static char ecdsa_hosts[8][64];
+
+static int wants_ecdsa(const char *host)
+{
+	int i;
+	for (i = 0; i < 8; i++)
+		if (!strcmp(ecdsa_hosts[i], host))
+			return 1;
+	return 0;
+}
+
+static void note_ecdsa(const char *host)
+{
+	static int next;
+	if (wants_ecdsa(host))
+		return;
+	str_copy(ecdsa_hosts[next], host, sizeof(ecdsa_hosts[0]));
+	next = (next + 1) % 8;
+}
+
+/* TLS on the open socket of c */
+static int start_tls(CONN *c, const char *host, char *err, int errlen)
+{
+	TLS *t;
+	int retry = 0;
+	char msg[200];
+	conn_tls_retry = 0;
+	if (!tls_load_anchors(conn_cacert, err, errlen)) {
+		conn_log(c->name, " !! ", err, strlen(err));
+		return 0;
+	}
+	t = tls_start(c->h, host, !wants_ecdsa(host), &retry, err, errlen);
+	if (!t) {
+		conn_log(c->name, " !! ", err, strlen(err));
+		if (retry) {
+			note_ecdsa(host);
+			conn_tls_retry = 1;
+		}
+		return 0;
+	}
+	c->tls = t;
+	snprintf(msg, sizeof(msg), "secure: %s", tls_describe(t));
+	conn_log(c->name, " -- ", msg, strlen(msg));
+	return 1;
+}
+
+int conn_starttls(CONN *c, const char *host, char *err, int errlen)
+{
+	return start_tls(c, host, err, errlen);
+}
+
+const char *conn_security(CONN *c)
+{
+	return c && c->tls ? tls_describe(c->tls) : "";
+}
 long conn_bytes;
 
 void conn_log(const char *who, const char *dir, const char *text, long n)
@@ -33,7 +94,7 @@ void conn_log(const char *who, const char *dir, const char *text, long n)
 	pf_close(h);
 }
 
-CONN *conn_open(const char *name, const char *host, unsigned short port, char *err, int errlen)
+static CONN *open_plain(const char *name, const char *host, unsigned short port, char *err, int errlen)
 {
 	CONN *c;
 	int h;
@@ -57,18 +118,37 @@ CONN *conn_open(const char *name, const char *host, unsigned short port, char *e
 	return c;
 }
 
+CONN *conn_open(const char *name, const char *host, unsigned short port, int sec,
+		char *err, int errlen)
+{
+	int attempt;
+	for (attempt = 0; attempt < 2; attempt++) {
+		CONN *c = open_plain(name, host, port, err, errlen);
+		if (!c || sec != SEC_TLS)
+			return c;
+		if (start_tls(c, host, err, errlen))
+			return c;
+		conn_close(c);
+		if (!conn_tls_retry)
+			return 0;
+	}
+	return 0;
+}
+
 void conn_close(CONN *c)
 {
 	if (!c)
 		return;
 	conn_log(c->name, " -- ", "closed", 6);
+	if (c->tls)
+		tls_close(c->tls);
 	net_close(c->h);
 	free(c);
 }
 
 int conn_write(CONN *c, const char *data, long n)
 {
-	if (net_write(c->h, data, n) != n) {
+	if ((c->tls ? tls_write(c->tls, data, n) : net_write(c->h, data, n)) != n) {
 		str_copy(c->err, "connection lost while sending", sizeof(c->err));
 		return 0;
 	}
@@ -117,7 +197,8 @@ static int fill(CONN *c)
 		return 1;
 	c->pos = c->len = 0;
 	for (;;) {
-		long r = net_read(c->h, c->buf, sizeof(c->buf));
+		long r = c->tls ? tls_read(c->tls, c->buf, sizeof(c->buf))
+				: net_read(c->h, c->buf, sizeof(c->buf));
 		if (r > 0) {
 			c->len = r;
 			conn_bytes += r;

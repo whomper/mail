@@ -88,6 +88,17 @@ void pf_now(PFTIME *t)
 	t->sec = tm.tm_sec;
 }
 
+void pf_entropy(unsigned char *buf, int n)
+{
+	int fd = open("/dev/urandom", O_RDONLY), got = 0;
+	if (fd >= 0) {
+		got = (int)read(fd, buf, n);
+		close(fd);
+	}
+	if (got != n)
+		abort();
+}
+
 unsigned long pf_ms(void)
 {
 	struct timespec ts;
