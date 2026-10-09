@@ -54,7 +54,8 @@ CONF=/etc/stunnel/atari-mail.conf
 cat > "$CONF" <<CONF
 ; MAIL gateway: plain mail protocols from the Atari, TLS to the provider.
 ; Written by MAIL's gateway/install.sh - run it again to change servers.
-pid = /run/stunnel-atari-mail.pid
+; in stunnel's own folder: it writes the file after becoming stunnel4
+pid = /run/stunnel4/atari-mail.pid
 setuid = stunnel4
 setgid = stunnel4
 ; TLS 1.2 or newer, and check the provider's certificate
@@ -86,6 +87,18 @@ checkHost = $POP3
 CONF
 fi
 
+install -d -o stunnel4 -g stunnel4 -m 755 /run/stunnel4
+
+# other stunnel set-ups on the same ports stop this one from starting
+for f in /etc/stunnel/*.conf; do
+  [ "$f" = "$CONF" ] && continue
+  for p in $P_IMAP $P_SMTP $P_POP3; do
+    if grep -Eq "^[[:space:]]*accept[[:space:]]*=[[:space:]]*(.*:)?$p[[:space:]]*$" "$f"; then
+      echo "WARNING: $f also uses port $p; move it away (e.g. rename it to .conf.off)." >&2
+    fi
+  done
+done
+
 # Debian's stunnel4 service starts every /etc/stunnel/*.conf
 if [ -f /etc/default/stunnel4 ]; then
   sed -i 's/^ENABLED=0/ENABLED=1/' /etc/default/stunnel4
@@ -104,6 +117,15 @@ if [ -n "$ALLOW" ]; then
     echo "ufw is not installed: anyone on your network can use the gateway." >&2
   fi
 fi
+
+sleep 2
+for p in $P_IMAP $P_SMTP; do
+  if ! ss -ltn "( sport = :$p )" | grep -q LISTEN; then
+    echo "WARNING: nothing listens on port $p; see: sudo journalctl -u stunnel4 -n 30" >&2
+  elif ! ss -ltnp "( sport = :$p )" | grep -q stunnel; then
+    echo "WARNING: port $p belongs to another program: $(ss -ltnp "( sport = :$p )" | grep -o 'users:.*')" >&2
+  fi
+done
 
 IP=$(hostname -I | awk '{print $1}')
 cat <<MSG
