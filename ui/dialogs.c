@@ -484,6 +484,7 @@ int dlg_account(ACCOUNT *a)
 	d_text(2, 18, "Signature:");
 	f_sig = d_edit(13, 18, sig, 46, 'X');
 	f_sig2 = d_edit(13, 19, sig2, 46, 'X');
+	d_text(13, 20, "(two lines; a \"|\" in line 2 starts another)");
 
 	b_del = d_button(2, 21, 10, "Delete", EXIT);
 	d_button(38, 21, 10, "Cancel", EXIT);

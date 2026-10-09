@@ -4,6 +4,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <ctype.h>
 #include "plat.h"
@@ -329,14 +330,14 @@ int store_init(const char *workdir)
 			char *key = str_trim(k), *val = eq + 1;
 			char *sc;
 			long i;
+			for (i = 0; key[i]; i++)	/* names in any case: PASS, pass */
+				key[i] = (char)tolower((unsigned char)key[i]);
 			/* "value ; comment" - but passwords may contain ';' */
 			if (strcmp(key, "pass") && strcmp(key, "smtppass") && strcmp(key, "dpass") &&
 			    strcmp(key, "dsmtppass") && strcmp(key, "signature") &&
 			    (sc = strstr(val, " ;")))
 				*sc = 0;
 			val = str_trim(val);
-			for (i = 0; key[i]; i++)
-				key[i] = (char)tolower((unsigned char)key[i]);
 			if (cur)
 				set_acct(cur, key, val);
 			else if (in_opts)
@@ -350,13 +351,35 @@ int store_init(const char *workdir)
 	return naccts;
 }
 
-/* MAIL.INF explains itself: a ';' line above every setting. MAIL skips
- * those lines when reading and writes them anew on every save. */
-static void note(SBUF *b, const char *s)
+/* MAIL.INF explains itself: every setting is a ';' line saying what it
+ * is, the setting in capitals, and an empty line. MAIL skips the notes
+ * when reading (and reads names in any case) and writes them anew on
+ * every save. */
+static void put_str(SBUF *b, const char *note, const char *key, const char *val)
 {
 	sb_adds(b, "; ");
-	sb_adds(b, s);
+	sb_adds(b, note);
 	sb_adds(b, "\r\n");
+	sb_adds(b, key);
+	sb_adds(b, "=");
+	escape(b, val);
+	sb_adds(b, "\r\n\r\n");
+}
+
+static void put_fmt(SBUF *b, const char *note, const char *key, const char *fmt, ...)
+{
+	char val[80];
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(val, sizeof(val), fmt, ap);
+	va_end(ap);
+	sb_adds(b, "; ");
+	sb_adds(b, note);
+	sb_adds(b, "\r\n");
+	sb_adds(b, key);
+	sb_adds(b, "=");
+	sb_adds(b, val);
+	sb_adds(b, "\r\n\r\n");
 }
 
 int store_save_settings(void)
@@ -368,108 +391,74 @@ int store_save_settings(void)
 	sb_init(&b);
 	sb_adds(&b, "; MAIL settings, written by MAIL.PRG. Lines starting with ; are notes.\r\n"
 		    "; Most of these are set in Options > Settings; see docs/GUIDE.md.\r\n"
-		    "; 1 means on, 0 means off.\r\n\r\n[options]\r\n");
-	note(&b, "your time zone, in minutes east of UTC (Israel: 120 winter, 180 summer)");
-	sb_printf(&b, "tz=%d\r\n", opt.tz);
-	note(&b, "check for new mail every this many minutes; 0 = only when you ask");
-	sb_printf(&b, "check=%d\r\n", opt.check);
-	note(&b, "messages loaded at a time in a folder; \"Load more\" gets the next ones (20-1000)");
-	sb_printf(&b, "page=%d\r\n", opt.page);
-	note(&b, "1 = keep messages you have read on disk after quitting, 0 = only their headers");
-	sb_printf(&b, "keepcache=%d\r\n", opt.keepcache);
-	note(&b, "1 = write the conversation with the servers to MAIL.LOG (passwords hidden)");
-	sb_printf(&b, "log=%d\r\n", opt.log);
-	note(&b, "1 = start with the Hebrew keyboard (F10 switches)");
-	sb_printf(&b, "hebrew=%d\r\n", opt.hebrew);
-	note(&b, "1 = work offline: don't connect, keep new messages in the Outbox");
-	sb_printf(&b, "offline=%d\r\n", opt.offline);
-	note(&b, "the editor wraps lines at this column (40-78)");
-	sb_printf(&b, "wrap=%d\r\n", opt.wrap);
-	note(&b, "main window: x,y,width,height in pixels; 0,0,0,0 = let MAIL place it");
-	sb_printf(&b, "main=%d,%d,%d,%d\r\n", opt.main_x, opt.main_y, opt.main_w, opt.main_h);
-	note(&b, "dividers: folder pane width, message list height, in pixels");
-	sb_printf(&b, "panes=%d,%d\r\n", opt.pane_w, opt.pane_h);
-	note(&b, "editor window: x,y,width,height in pixels; 0,0,0,0 = let MAIL place it");
-	sb_printf(&b, "editor=%d,%d,%d,%d\r\n", opt.ed_x, opt.ed_y, opt.ed_w, opt.ed_h);
-	note(&b, "text font: GDOS font id (1 = system font), size in points");
-	note(&b, "(system font: 0 = normal, 8 = small, 16 = large); set with Options > Font");
-	sb_printf(&b, "font=%d,%d\r\n", opt.font_id, opt.font_pt);
-	note(&b, "where the screen font has its Hebrew letters: 0 = Atari (standard TOS font),");
-	note(&b, "1 = ISO-8859-8 places (Israeli Hebrew fonts), 2 = DOS 862 places; set in Options > Font");
-	sb_printf(&b, "hebfont=%d\r\n", opt.hebfont);
-	note(&b, "1 = Falcon mode: MAIL connects to the mail providers itself, with TLS (the");
-	note(&b, "DSP checks signatures); 0 = through the Raspberry Pi gateway. Options > Settings");
-	sb_printf(&b, "falcon=%d\r\n", opt.falcon);
-	note(&b, "Falcon mode: 1 = the DSP checks the servers' signatures, 0 = the 68030 does");
-	sb_printf(&b, "dsp=%d\r\n", opt.dsp);
-	note(&b, "1 = Hebrew that arrives already in Atari characters (from a bridge made for");
-	note(&b, "Troll) is in display order: turn it back into reading order; set in Options > Settings");
-	sb_printf(&b, "bridgeorder=%d\r\n", cs_bridge_visual);
+		    "; 1 means on, 0 means off.\r\n\r\n[OPTIONS]\r\n\r\n");
+	put_fmt(&b, "your time zone in minutes east of UTC (Israel: 120 in winter, 180 in summer)",
+		"TZ", "%d", opt.tz);
+	put_fmt(&b, "check for new mail every this many minutes; 0 = only when you ask",
+		"CHECK", "%d", opt.check);
+	put_fmt(&b, "messages loaded at a time in a folder, \"Load more\" gets the next ones (20-1000)",
+		"PAGE", "%d", opt.page);
+	put_fmt(&b, "1 = keep messages you have read on disk after quitting, 0 = only their headers",
+		"KEEPCACHE", "%d", opt.keepcache);
+	put_fmt(&b, "1 = write the conversation with the servers to MAIL.LOG (passwords hidden)",
+		"LOG", "%d", opt.log);
+	put_fmt(&b, "1 = start with the Hebrew keyboard (F10 switches)", "HEBREW", "%d", opt.hebrew);
+	put_fmt(&b, "1 = work offline: don't connect, keep new messages in the Outbox",
+		"OFFLINE", "%d", opt.offline);
+	put_fmt(&b, "the editor wraps lines at this column (40-78)", "WRAP", "%d", opt.wrap);
+	put_fmt(&b, "main window x,y,width,height in pixels; 0,0,0,0 = let MAIL place it",
+		"MAIN", "%d,%d,%d,%d", opt.main_x, opt.main_y, opt.main_w, opt.main_h);
+	put_fmt(&b, "dividers: folder pane width, message list height, in pixels",
+		"PANES", "%d,%d", opt.pane_w, opt.pane_h);
+	put_fmt(&b, "editor window x,y,width,height in pixels; 0,0,0,0 = let MAIL place it",
+		"EDITOR", "%d,%d,%d,%d", opt.ed_x, opt.ed_y, opt.ed_w, opt.ed_h);
+	put_fmt(&b, "text font: GDOS font id (1 = system font), size (system font: 0, 8 small, 16 large)",
+		"FONT", "%d,%d", opt.font_id, opt.font_pt);
+	put_fmt(&b, "the font's Hebrew letters: 0 = Atari places, 1 = ISO-8859-8, 2 = DOS 862 (Options > Font)",
+		"HEBFONT", "%d", opt.hebfont);
+	put_fmt(&b, "1 = Falcon mode: TLS on the Atari, straight to the providers; 0 = through the Pi gateway",
+		"FALCON", "%d", opt.falcon);
+	put_fmt(&b, "Falcon mode: 1 = the DSP checks the servers' signatures, 0 = the 68030 does",
+		"DSP", "%d", opt.dsp);
+	put_fmt(&b, "1 = Hebrew from a Troll bridge arrives in display order: turn it into reading order",
+		"BRIDGEORDER", "%d", cs_bridge_visual);
 	for (i = 0; i < naccts; i++) {
 		ACCOUNT *a = accts[i];
-		sb_adds(&b, "\r\n; one [account] part per account, up to 8; Options > Accounts edits them\r\n"
-			    "[account]\r\n");
-		note(&b, "the account's name in the folder list");
-		sb_adds(&b, "name=");
-		escape(&b, a->name);
-		sb_adds(&b, "\r\n");
-		note(&b, "your name, as people you write to see it");
-		sb_adds(&b, "fullname=");
-		escape(&b, a->fullname);
-		sb_adds(&b, "\r\n");
-		note(&b, "your e-mail address");
-		sb_printf(&b, "email=%s\r\n", a->email);
-		note(&b, "incoming mail: imap (folders stay on the server) or pop3 (mail comes to the Atari)");
-		sb_printf(&b, "in=%s\r\n", a->pop ? "pop3" : "imap");
-		note(&b, "incoming server and port; through the Pi gateway: its IP, 143 (IMAP) or 110 (POP3)");
-		sb_printf(&b, "host=%s\r\nport=%u\r\n", a->host, a->port);
-		note(&b, "login for the incoming server");
-		sb_adds(&b, "user=");
-		escape(&b, a->user);
-		sb_adds(&b, "\r\n");
-		note(&b, "password, as typed: keep this file to yourself");
-		sb_adds(&b, "pass=");
-		escape(&b, a->pass);
-		sb_adds(&b, "\r\n");
-		note(&b, "POP3 only: 1 = leave mail on the server after downloading it");
-		sb_printf(&b, "leave=%d\r\n", a->leave);
-		note(&b, "outgoing (SMTP) server and port; through the Pi gateway: its IP and 587");
-		sb_printf(&b, "smtphost=%s\r\nsmtpport=%u\r\n", a->smtphost, a->smtpport);
-		note(&b, "SMTP login: empty = same as incoming, - = the server needs no login");
-		sb_adds(&b, "smtpuser=");
-		escape(&b, a->smtpuser);
-		sb_adds(&b, "\r\n");
-		note(&b, "SMTP password, if the SMTP login differs");
-		sb_adds(&b, "smtppass=");
-		escape(&b, a->smtppass);
-		sb_adds(&b, "\r\n");
-		note(&b, "IMAP folder for copies of sent mail; empty = the server's Sent folder");
-		sb_adds(&b, "sent=");
-		escape(&b, a->sentname);
-		sb_adds(&b, "\r\n");
-		note(&b, "Falcon mode: the provider's own servers and ports; 993/995/465 are TLS,");
-		note(&b, "other ports STARTTLS (dsec/dsmtpsec 1 = TLS, 2 = STARTTLS overrides)");
-		sb_adds(&b, "dhost=");
-		escape(&b, a->dhost);
-		sb_printf(&b, "\r\ndport=%u\r\ndsmtphost=", a->dport);
-		escape(&b, a->dsmtphost);
-		sb_printf(&b, "\r\ndsmtpport=%u\r\n", a->dsmtpport);
-		if (a->dsec || a->dsmtpsec)
-			sb_printf(&b, "dsec=%d\r\ndsmtpsec=%d\r\n", a->dsec, a->dsmtpsec);
-		note(&b, "Falcon mode's own login and password, and its SMTP login (as above)");
-		sb_adds(&b, "duser=");
-		escape(&b, a->duser);
-		sb_adds(&b, "\r\ndpass=");
-		escape(&b, a->dpass);
-		sb_adds(&b, "\r\ndsmtpuser=");
-		escape(&b, a->dsmtpuser);
-		sb_adds(&b, "\r\ndsmtppass=");
-		escape(&b, a->dsmtppass);
-		sb_adds(&b, "\r\n");
-		note(&b, "added below new messages; \\n starts a new line (| in the account dialog)");
-		sb_adds(&b, "signature=");
-		escape(&b, a->signature);
-		sb_adds(&b, "\r\n");
+		sb_adds(&b, "; one [ACCOUNT] part per account, up to 8; Options > Accounts edits them\r\n"
+			    "[ACCOUNT]\r\n\r\n");
+		put_str(&b, "the account's name in the folder list", "NAME", a->name);
+		put_str(&b, "your name, as people you write to see it", "FULLNAME", a->fullname);
+		put_str(&b, "your e-mail address", "EMAIL", a->email);
+		put_str(&b, "incoming mail: imap (folders stay on the server) or pop3 (mail comes to the Atari)",
+			"IN", a->pop ? "pop3" : "imap");
+		put_str(&b, "incoming server through the Pi gateway: the Pi's IP address", "HOST", a->host);
+		put_fmt(&b, "its port: 143 (IMAP) or 110 (POP3) on the gateway", "PORT", "%u", a->port);
+		put_str(&b, "login for the incoming server (Pi gateway)", "USER", a->user);
+		put_str(&b, "password, as typed: keep this file to yourself", "PASS", a->pass);
+		put_fmt(&b, "POP3 only: 1 = leave mail on the server after downloading it",
+			"LEAVE", "%d", a->leave);
+		put_str(&b, "outgoing (SMTP) server through the Pi gateway: the Pi's IP address",
+			"SMTPHOST", a->smtphost);
+		put_fmt(&b, "its port: 587 on the gateway", "SMTPPORT", "%u", a->smtpport);
+		put_str(&b, "SMTP login: empty = same as incoming, - = the server needs no login",
+			"SMTPUSER", a->smtpuser);
+		put_str(&b, "SMTP password, if the SMTP login differs", "SMTPPASS", a->smtppass);
+		put_str(&b, "IMAP folder for copies of sent mail; empty = the server's Sent folder",
+			"SENT", a->sentname);
+		put_str(&b, "Falcon mode: the provider's incoming server", "DHOST", a->dhost);
+		put_fmt(&b, "its port: 993 (IMAP) and 995 (POP3) are TLS, others STARTTLS", "DPORT", "%u", a->dport);
+		put_fmt(&b, "0 = TLS or STARTTLS by the port, 1 = always TLS, 2 = always STARTTLS",
+			"DSEC", "%d", a->dsec);
+		put_str(&b, "Falcon mode: the provider's outgoing (SMTP) server", "DSMTPHOST", a->dsmtphost);
+		put_fmt(&b, "its port: 465 is TLS, 587 STARTTLS", "DSMTPPORT", "%u", a->dsmtpport);
+		put_fmt(&b, "0 = TLS or STARTTLS by the port, 1 = always TLS, 2 = always STARTTLS",
+			"DSMTPSEC", "%d", a->dsmtpsec);
+		put_str(&b, "Falcon mode: login for the provider's incoming server", "DUSER", a->duser);
+		put_str(&b, "Falcon mode: its password (for iCloud and Gmail an app password)", "DPASS", a->dpass);
+		put_str(&b, "Falcon mode: SMTP login; empty = same as incoming, - = none", "DSMTPUSER", a->dsmtpuser);
+		put_str(&b, "Falcon mode: SMTP password, if the SMTP login differs", "DSMTPPASS", a->dsmtppass);
+		put_str(&b, "added below new messages; \\n starts a new line (two lines in the account dialog)",
+			"SIGNATURE", a->signature);
 	}
 	r = pf_save(inf_path, b.s, b.len);
 	sb_free(&b);

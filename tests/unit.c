@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include "charset.h"
 #include "mime.h"
 #include "compose.h"
@@ -268,9 +269,51 @@ static void t_num(void)
 	CHECK(!strcmp(num(-45210), "-45,210"), "-45,210: %s", num(-45210));
 }
 
+/* MAIL.INF: names in capitals, a note, the setting and an empty line;
+   read back the same, a password with " ;" and a two-line signature too */
+static void t_inf(void)
+{
+	char dir[64], path[100], *inf, *p;
+	ACCOUNT *a;
+	long len;
+	int blank_after = 1;
+	snprintf(dir, sizeof(dir), "/tmp/mail-unit-inf.%d", (int)getpid());
+	mkdir(dir, 0755);
+	snprintf(path, sizeof(path), "%s/MAIL.INF", dir);
+	{
+		static const char old[] = "[options]\r\ntz=180\r\n[account]\r\nname=Home\r\nemail=a@me.com\r\n"
+			"user=a\r\npass=x ;y\r\nsignature=Dana\\nTel Aviv\r\n";
+		pf_save(path, old, (long)strlen(old));
+	}
+	CHECK(store_init(dir) == 1, "old lower-case MAIL.INF read");
+	CHECK(!strcmp(accts[0]->pass, "x ;y"), "password with ' ;' kept: %s", accts[0]->pass);
+	CHECK(store_save_settings() == 0, "settings saved");
+	inf = pf_load(path, &len);
+	CHECK(inf && strstr(inf, "\r\n[OPTIONS]\r\n") && strstr(inf, "\r\n[ACCOUNT]\r\n"), "sections in capitals");
+	CHECK(inf && strstr(inf, "; your time zone") && strstr(inf, "\r\nTZ=180\r\n\r\n; "), "note, TZ=, empty line");
+	CHECK(inf && strstr(inf, "\r\nPASS=x ;y\r\n\r\n"), "PASS written");
+	CHECK(inf && strstr(inf, "\r\nSIGNATURE=Dana\\nTel Aviv\r\n"), "SIGNATURE written");
+	/* every setting line: a note above, an empty line below */
+	for (p = inf; p && (p = strstr(p, "\r\n")); p += 2) {
+		const char *l = p + 2;
+		if (*l >= 'A' && *l <= 'Z' && strchr(l, '=') && strchr(l, '=') < strstr(l, "\r\n"))
+			if (strncmp(strstr(l, "\r\n"), "\r\n\r\n", 4))
+				blank_after = 0;
+	}
+	CHECK(blank_after, "an empty line after every setting");
+	store_init(dir);
+	a = accts[0];
+	CHECK(!strcmp(a->pass, "x ;y") && !strcmp(a->signature, "Dana\nTel Aviv") && opt.tz == 180,
+	      "read back from the new MAIL.INF");
+	free(inf);
+	unlink(path);
+	rmdir(dir);
+}
+
 int main(void)
 {
 	t_num();
+	t_inf();
 	t_charset();
 	t_mime();
 	t_compose();
