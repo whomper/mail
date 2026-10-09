@@ -70,7 +70,7 @@ like a modern mail program:
   as text. Quoted lines are drawn light.
 
 **Drag the dividers** between the panes to size them; the pointer turns
-into arrows over a divider. Drag the box in the bottom right corner to
+into a hand over a divider. Drag the box in the bottom right corner to
 size the window. Each pane has its own scroll bar. The pane
 with the dark header has the keyboard: click a pane, or press Tab to
 move on. The main window's own place and size, the dividers, the

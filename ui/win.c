@@ -734,7 +734,7 @@ static void divider_drag(int vertical)
 	GRECT lim = mwork;
 	wind_update(BEG_UPDATE);
 	wind_update(3);
-	graf_mouse(vertical ? 7 : 6, 0);	/* the sizing pointers */
+	graf_mouse(FLAT_HAND, 0);		/* as Claude ST's divider */
 	clip_on(&lim);
 	vswr_mode(vdi_h, 3);			/* XOR */
 	vsl_color(vdi_h, 1);
@@ -806,12 +806,9 @@ void win_hover(short mx, short my)
 	wind_get(0, WF_TOP, &t, &d, &d, &d);
 	if (h == main_h && t == main_h) {
 		GRECT g = grip_rect();
-		if (inside(&g, mx, my))
+		/* the flat hand, as over Claude ST's divider */
+		if (inside(&g, mx, my) || on_divider(mx, my, 1) || on_divider(mx, my, 0))
 			want = FLAT_HAND;
-		else if (on_divider(mx, my, 1))
-			want = 7;	/* LR arrows */
-		else if (on_divider(mx, my, 0))
-			want = 6;	/* UD arrows */
 	}
 	if (want != hover_shape) {
 		graf_mouse(want, 0);
@@ -850,6 +847,7 @@ static void main_resize(void)
 	scr.h = scr_h;
 	wind_update(BEG_UPDATE);
 	wind_update(3);
+	graf_mouse(FLAT_HAND, 0);
 	clip_on(&scr);
 	vswr_mode(vdi_h, 3);		/* XOR */
 	vsl_color(vdi_h, 1);
