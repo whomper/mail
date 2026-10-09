@@ -139,7 +139,7 @@ void list_after_remove(void)
 
 static short wide;	/* room for the year and the size column */
 
-/* the marks column: ! or R, and @, from the left edge, then a space.
+/* the marks column: ! (flagged) and @ (attachments), then a space.
    Unread messages are bold. */
 #define MK 3
 
@@ -225,16 +225,11 @@ static void draw(WIN *w, GRECT *clip)
 		}
 		if (!(h->flags & MF_SEEN))
 			fl |= TX_BOLD;
-		/* the marks there are, from the start of the line */
-		{
-			short k = 0;
-			if (h->flags & (MF_FLAGGED | MF_ANSWERED))
-				marks[k++] = (h->flags & MF_FLAGGED) ? '!' : 'R';
-			if (h->flags & MF_ATTACH)
-				marks[k++] = '@';
-			marks[k] = 0;
-			text_at(x0, y, marks, k, MK - 1, fl & ~TX_BOLD);
-		}
+		/* fixed places: ! flagged, @ attachments */
+		marks[0] = (h->flags & MF_FLAGGED) ? '!' : ' ';
+		marks[1] = (h->flags & MF_ATTACH) ? '@' : ' ';
+		marks[2] = 0;
+		text_at(x0, y, marks, 2, 2, fl & ~TX_BOLD);
 		/* "Name <a@b>" shows as Name */
 		addr_split(who ? who : "", name, sizeof(name), 0, 0);
 		if (!name[0])

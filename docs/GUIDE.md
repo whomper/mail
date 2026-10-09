@@ -62,7 +62,8 @@ like a modern mail program:
 - **Folders** (left): each account with its folders and unread counts.
   Click a folder to open it. Click an account's name to check its mail.
 - **Messages** (top right): newest first. Unread messages are bold;
-  `!` is flagged, `R` answered, `@` probably has attachments. In
+  `!` in the first place is flagged, `@` in the second probably has
+  attachments. In
   Sent and the Outbox it shows who you wrote to. Its header shows how
   many messages are loaded and how many there are.
 - **Message** (bottom right): the selected message. Click an attachment
