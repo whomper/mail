@@ -50,6 +50,9 @@ typedef struct {
 	char dsmtphost[64];
 	unsigned short dsmtpport;
 	short dsec, dsmtpsec;	/* 0: by the port (993/995/465 TLS, else STARTTLS) */
+	/* Falcon mode's own logins, kept apart from the gateway's */
+	char duser[96], dpass[64];
+	char dsmtpuser[96], dsmtppass[64];
 
 	/* runtime */
 	short id;		/* 1..MAXACCT */
@@ -58,6 +61,10 @@ typedef struct {
 	FINFO folders[MAXFOLDER];
 	IMAP *im;		/* kept open while working, like the GFA Troll */
 	unsigned long im_used;
+	/* the last connection failed: work from the cache until Check mail
+	   (or the timed check) connects again */
+	short cut;
+	char cuterr[160];
 } ACCOUNT;
 
 /* where a screen font keeps the Hebrew letters */
@@ -118,6 +125,12 @@ unsigned short acct_port(ACCOUNT *a, int smtp);
 int acct_sec(ACCOUNT *a, int smtp);		/* SEC_* (conn.h) */
 /* fill in a provider's direct servers from the e-mail address; 1 if known */
 int acct_preset(ACCOUNT *a);
+/* the login in use: the gateway's or, in Falcon mode, Falcon mode's own.
+   smtp: 0 incoming, 1 outgoing; NULL user: the server needs no login */
+const char *acct_user(ACCOUNT *a, int smtp);
+const char *acct_pass(ACCOUNT *a, int smtp);
+/* a login set never filled in starts as a copy of the other one */
+void acct_fill_logins(ACCOUNT *a);
 void acct_delete(ACCOUNT *a);
 void acct_dirs(ACCOUNT *a);
 

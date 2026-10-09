@@ -280,6 +280,8 @@ static void refind_current(const char *server)
 
 /* ---------------- commands ---------------- */
 
+static int quiet_check;		/* the timed check: errors on the status line */
+
 void cmd_check_all(void)
 {
 	short i;
@@ -307,9 +309,11 @@ void cmd_check_all(void)
 		list_refresh();
 	}
 	last_check = pf_ms();
-	if (errs[0])
+	if (errs[0] && !quiet_check)
 		alert(1, "[1][%s][ OK ]", errs);
-	{
+	if (errs[0]) {
+		status(errs);
+	} else {
 		char m[60];
 		snprintf(m, sizeof(m), total == 1 ? "1 new message" : "%ld new messages", total);
 		status(m);
@@ -328,6 +332,10 @@ static void cmd_reply(int all, int forward)
 {
 	ACCOUNT *a = cur_acct;
 	char *text, refs[1100];
+	if (reader_missing) {
+		alert(1, "[1][This message hasn't been|downloaded yet: check mail|to connect, then open it.][ OK ]");
+		return;
+	}
 	if (!cur_msg || !a)
 		return;
 	if (forward) {
@@ -922,8 +930,11 @@ int main(void)
 			wait_release();
 		}
 		if ((which & MU_TIMER) && opt.check > 0 && !opt.offline && naccts &&
-		    pf_ms() - last_check > (unsigned long)opt.check * 60000UL)
+		    pf_ms() - last_check > (unsigned long)opt.check * 60000UL) {
+			quiet_check = 1;
 			cmd_check_all();
+			quiet_check = 0;
+		}
 	}
 
 	mail_disconnect_all();

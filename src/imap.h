@@ -17,6 +17,7 @@
 #define MF_JUNK      0x0040
 #define MF_ATTACH    0x0080	/* multipart/mixed: probably has attachments */
 #define MF_CACHED    0x0100	/* body is in the local cache */
+#define MF_FLAGSYNC  0x0200	/* read/flagged changed offline: tell the server */
 
 /* folder roles */
 #define FR_INBOX  1

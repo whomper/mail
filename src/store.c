@@ -138,6 +138,41 @@ int acct_sec(ACCOUNT *a, int smtp)
 	return p == 993 || p == 995 || p == 465 ? SEC_TLS : SEC_STARTTLS;
 }
 
+const char *acct_user(ACCOUNT *a, int smtp)
+{
+	const char *u = opt.falcon ? a->duser : a->user;
+	if (smtp) {
+		const char *su = opt.falcon ? a->dsmtpuser : a->smtpuser;
+		if (!strcmp(su, "-"))
+			return 0;
+		if (su[0])
+			return su;
+	}
+	return u;
+}
+
+const char *acct_pass(ACCOUNT *a, int smtp)
+{
+	if (smtp && (opt.falcon ? a->dsmtpuser : a->smtpuser)[0])
+		return opt.falcon ? a->dsmtppass : a->smtppass;
+	return opt.falcon ? a->dpass : a->pass;
+}
+
+void acct_fill_logins(ACCOUNT *a)
+{
+	if (!a->duser[0] && !a->dpass[0] && !a->dsmtpuser[0]) {
+		str_copy(a->duser, a->user, sizeof(a->duser));
+		str_copy(a->dpass, a->pass, sizeof(a->dpass));
+		str_copy(a->dsmtpuser, a->smtpuser, sizeof(a->dsmtpuser));
+		str_copy(a->dsmtppass, a->smtppass, sizeof(a->dsmtppass));
+	} else if (!a->user[0] && !a->pass[0] && !a->smtpuser[0]) {
+		str_copy(a->user, a->duser, sizeof(a->user));
+		str_copy(a->pass, a->dpass, sizeof(a->pass));
+		str_copy(a->smtpuser, a->dsmtpuser, sizeof(a->smtpuser));
+		str_copy(a->smtppass, a->dsmtppass, sizeof(a->smtppass));
+	}
+}
+
 /* the big providers' servers, for Falcon mode */
 static const struct {
 	const char *domains, *in, *out;
@@ -225,6 +260,10 @@ static void set_acct(ACCOUNT *a, const char *k, const char *v)
 	else if (!strcmp(k, "dsmtpport")) a->dsmtpport = (unsigned short)atoi(tmp);
 	else if (!strcmp(k, "dsec")) a->dsec = (short)atoi(tmp);
 	else if (!strcmp(k, "dsmtpsec")) a->dsmtpsec = (short)atoi(tmp);
+	else if (!strcmp(k, "duser")) str_copy(a->duser, tmp, sizeof(a->duser));
+	else if (!strcmp(k, "dpass")) str_copy(a->dpass, tmp, sizeof(a->dpass));
+	else if (!strcmp(k, "dsmtpuser")) str_copy(a->dsmtpuser, tmp, sizeof(a->dsmtpuser));
+	else if (!strcmp(k, "dsmtppass")) str_copy(a->dsmtppass, tmp, sizeof(a->dsmtppass));
 }
 
 static void set_opt(const char *k, const char *v)
@@ -251,7 +290,7 @@ int store_init(const char *workdir)
 {
 	char *buf, *line, *next;
 	ACCOUNT *cur = 0;
-	short in_opts = 0;
+	short in_opts = 0, i;
 
 	defaults();
 	str_copy(opt.workdir, workdir, sizeof(opt.workdir));
@@ -289,7 +328,8 @@ int store_init(const char *workdir)
 			char *sc;
 			long i;
 			/* "value ; comment" - but passwords may contain ';' */
-			if (strcmp(key, "pass") && strcmp(key, "smtppass") && strcmp(key, "signature") &&
+			if (strcmp(key, "pass") && strcmp(key, "smtppass") && strcmp(key, "dpass") &&
+			    strcmp(key, "dsmtppass") && strcmp(key, "signature") &&
 			    (sc = strstr(val, " ;")))
 				*sc = 0;
 			val = str_trim(val);
@@ -303,6 +343,8 @@ int store_init(const char *workdir)
 	}
 	free(buf);
 	tls_tz_minutes = opt.tz;
+	for (i = 0; i < naccts; i++)
+		acct_fill_logins(accts[i]);
 	return naccts;
 }
 
@@ -410,6 +452,16 @@ int store_save_settings(void)
 		sb_printf(&b, "\r\ndsmtpport=%u\r\n", a->dsmtpport);
 		if (a->dsec || a->dsmtpsec)
 			sb_printf(&b, "dsec=%d\r\ndsmtpsec=%d\r\n", a->dsec, a->dsmtpsec);
+		note(&b, "Falcon mode's own login and password, and its SMTP login (as above)");
+		sb_adds(&b, "duser=");
+		escape(&b, a->duser);
+		sb_adds(&b, "\r\ndpass=");
+		escape(&b, a->dpass);
+		sb_adds(&b, "\r\ndsmtpuser=");
+		escape(&b, a->dsmtpuser);
+		sb_adds(&b, "\r\ndsmtppass=");
+		escape(&b, a->dsmtppass);
+		sb_adds(&b, "\r\n");
 		note(&b, "added below new messages; \\n starts a new line (| in the account dialog)");
 		sb_adds(&b, "signature=");
 		escape(&b, a->signature);

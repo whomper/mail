@@ -339,14 +339,16 @@ static int selected(short i)
 
 /* ---------------- alerts ---------------- */
 
-/* format, then make the message part fit: no brackets, lines of at most
-   40 characters, at most 5 lines */
+/* format, then make the message part fit: no brackets, words wrapped
+   into lines of at most 30 characters (what every TOS shows), at most 5 */
+#define ALW 30
+
 short alert(short def, const char *fmt, ...)
 {
 	char raw[600], out[600];
 	const char *msg, *btn;
 	va_list ap;
-	short o = 0, col = 0, lines = 1;
+	short o, lines = 0;
 	va_start(ap, fmt);
 	vsnprintf(raw, sizeof(raw), fmt, ap);
 	va_end(ap);
@@ -362,35 +364,31 @@ short alert(short def, const char *fmt, ...)
 	msg += 2;
 	memcpy(out, raw, msg - raw);
 	o = msg - raw;
-	while (msg < btn && o < (short)sizeof(out) - 40) {
-		char c = *msg++;
-		if (c == '[')
-			c = '(';
-		else if (c == ']')
-			c = ')';
-		if (c == '|') {
-			if (lines >= 5)
-				break;
-			lines++;
-			col = 0;
-			out[o++] = c;
-			continue;
+	while (msg < btn && lines < 5) {
+		/* one line: up to the next '|', or the last space that fits */
+		const char *end = msg, *cut;
+		short n;
+		while (end < btn && *end != '|')
+			end++;
+		cut = end;
+		if (end - msg > ALW) {
+			cut = msg + ALW;
+			while (cut > msg && *cut != ' ')
+				cut--;
+			if (cut == msg)
+				cut = msg + ALW;	/* one long word: break it */
 		}
-		if (col >= 38 && c == ' ' && lines < 5) {
+		if (lines)
 			out[o++] = '|';
-			lines++;
-			col = 0;
-			continue;
+		for (n = 0; msg < cut && o < (short)sizeof(out) - 40; n++) {
+			char c = *msg++;
+			out[o++] = c == '[' ? '(' : c == ']' ? ')' : c;
 		}
-		if (col >= 44) {
-			if (lines >= 5)
-				continue;
-			out[o++] = '|';
-			lines++;
-			col = 0;
-		}
-		out[o++] = c;
-		col++;
+		lines++;
+		while (msg < btn && *msg == ' ')
+			msg++;
+		if (msg < btn && *msg == '|')
+			msg++;
 	}
 	str_copy(out + o, btn, sizeof(out) - o);
 	return form_alert(def, out);
@@ -429,18 +427,21 @@ int dlg_account(ACCOUNT *a)
 		acct_preset(a);
 	str_copy(host, opt.falcon ? a->dhost : a->host, sizeof(host));
 	snprintf(port, sizeof(port), "%u", opt.falcon ? acct_port(a, 0) : a->port);
-	str_copy(user, a->user, sizeof(user));
-	str_copy(pass, a->pass, sizeof(pass));
+	/* each mode has its own login: Falcon mode's goes to the provider,
+	   the gateway's to the Pi (which may want something else) */
+	acct_fill_logins(a);
+	str_copy(user, opt.falcon ? a->duser : a->user, sizeof(user));
+	str_copy(pass, opt.falcon ? a->dpass : a->pass, sizeof(pass));
 	str_copy(shost, opt.falcon ? a->dsmtphost : a->smtphost, sizeof(shost));
 	snprintf(sport, sizeof(sport), "%u", opt.falcon ? acct_port(a, 1) : a->smtpport);
-	str_copy(suser, a->smtpuser, sizeof(suser));
-	str_copy(spass, a->smtppass, sizeof(spass));
+	str_copy(suser, opt.falcon ? a->dsmtpuser : a->smtpuser, sizeof(suser));
+	str_copy(spass, opt.falcon ? a->dsmtppass : a->smtppass, sizeof(spass));
 	sig_to_line(sig, a->signature, sizeof(sig));
 
 	d_begin(62, 23);
 	d_add(G_STRING, 0, 0, (long)"Mail account", 2, 1, 12, 1);
-	d_text(16, 1, opt.falcon ? "servers: the provider's own (Falcon mode)"
-				 : "servers: the gateway (Raspberry Pi)");
+	d_text(16, 1, opt.falcon ? "Falcon mode: the provider's servers, login"
+				 : "the Pi gateway's servers and login");
 	d_text(2, 3, "Account name:");
 	f_name = d_edit(17, 3, name, 30, 'X');
 	d_text(2, 4, "Your name:");
@@ -505,8 +506,13 @@ int dlg_account(ACCOUNT *a)
 		if (!a->port)
 			a->port = a->pop ? 110 : 143;
 	}
-	str_copy(a->user, user, sizeof(a->user));
-	str_copy(a->pass, pass, sizeof(a->pass));
+	if (opt.falcon) {
+		str_copy(a->duser, user, sizeof(a->duser));
+		str_copy(a->dpass, pass, sizeof(a->dpass));
+	} else {
+		str_copy(a->user, user, sizeof(a->user));
+		str_copy(a->pass, pass, sizeof(a->pass));
+	}
 	a->leave = selected(f_leave);
 	if (opt.falcon) {
 		str_copy(a->dsmtphost, shost, sizeof(a->dsmtphost));
@@ -522,8 +528,14 @@ int dlg_account(ACCOUNT *a)
 		if (!a->smtpport)
 			a->smtpport = 587;
 	}
-	str_copy(a->smtpuser, suser, sizeof(a->smtpuser));
-	str_copy(a->smtppass, spass, sizeof(a->smtppass));
+	if (opt.falcon) {
+		str_copy(a->dsmtpuser, suser, sizeof(a->dsmtpuser));
+		str_copy(a->dsmtppass, spass, sizeof(a->dsmtppass));
+	} else {
+		str_copy(a->smtpuser, suser, sizeof(a->smtpuser));
+		str_copy(a->smtppass, spass, sizeof(a->smtppass));
+	}
+	acct_fill_logins(a);		/* a new account: the other mode starts the same */
 	line_to_sig(a->signature, sig, sizeof(a->signature));
 	return 1;
 }

@@ -109,6 +109,7 @@ static SMTP *open_once(const char *host, unsigned short port, int sec, const cha
 	if (user && *user) {
 		long ul = strlen(user), pl = strlen(pass);
 		char raw[300], *b64;
+		conn_log_login("SMTP", user, pass);
 		if (has_auth(s, "PLAIN") || !has_auth(s, "LOGIN")) {
 			if (ul + pl + 2 > (long)sizeof(raw))
 				pl = sizeof(raw) - ul - 2;

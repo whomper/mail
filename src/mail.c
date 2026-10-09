@@ -16,6 +16,7 @@
 #include "util.h"
 
 char mail_err[200];
+int mail_unreachable;
 void (*mail_status)(const char *msg);
 
 static void status(const char *fmt, ...)
@@ -34,6 +35,7 @@ static int offline(void)
 {
 	if (opt.offline) {
 		str_copy(mail_err, "MAIL is working offline (Options menu).", sizeof(mail_err));
+		mail_unreachable = 1;
 		return 1;
 	}
 	return 0;
@@ -70,6 +72,7 @@ static int imap_failed(ACCOUNT *a, int r)
 
 int mail_connect(ACCOUNT *a)
 {
+	mail_unreachable = 0;
 	if (a->pop)
 		return 1;
 	if (offline())
@@ -82,12 +85,24 @@ int mail_connect(ACCOUNT *a)
 		}
 		mail_disconnect(a);
 	}
+	if (a->cut) {
+		/* don't try again on every click: Check mail does */
+		snprintf(mail_err, sizeof(mail_err), "%s is not connected: %s", a->name, a->cuterr);
+		mail_unreachable = 1;
+		return 0;
+	}
 	status(acct_sec(a, 0) ? "%s: connecting securely to %s..." : "%s: connecting to %s...",
 	       a->name, acct_host(a, 0));
-	a->im = imap_login(acct_host(a, 0), acct_port(a, 0), acct_sec(a, 0), a->user, a->pass,
+	a->im = imap_login(acct_host(a, 0), acct_port(a, 0), acct_sec(a, 0), acct_user(a, 0), acct_pass(a, 0),
 			   mail_err, sizeof(mail_err));
-	if (!a->im)
+	if (!a->im) {
+		a->cut = 1;
+		str_copy(a->cuterr, mail_err, sizeof(a->cuterr));
+		mail_unreachable = 1;
+		status("%s: not connected, working from the cache", a->name);
 		return 0;
+	}
+	a->cut = 0;
 	a->im_used = pf_ms();
 	return 1;
 }
@@ -265,6 +280,8 @@ static void header_cb(void *ud, IMAPFETCH *im)
  * with, more with mail_load_more): their flags, and the headers of the
  * ones we don't have yet. Older messages stay on the server only, so a
  * Sent folder with 8000 messages costs no more than one with 100. */
+static long flags_pushed;
+
 static int sync_window(ACCOUNT *a, FINFO *fi, FOLDER *f, long *newmsgs)
 {
 	UIDLIST u;
@@ -307,6 +324,32 @@ static int sync_window(ACCOUNT *a, FINFO *fi, FOLDER *f, long *newmsgs)
 		return imap_failed(a, r);
 	}
 	qsort_pairs(&u);
+
+	/* read and flagged changes made while not connected go to the server
+	   first, or the server's flags would undo them */
+	for (i = 0; i < f->n && r > 0; i++) {
+		HDR *h = &f->h[i];
+		long k;
+		unsigned short d, bit;
+		if (!(h->flags & MF_FLAGSYNC) || (k = find_uid(&u, h->uid)) < 0)
+			continue;
+		d = (h->flags ^ u.flags[k]) & (MF_SEEN | MF_FLAGGED | MF_ANSWERED);
+		for (bit = 1; bit && r > 0; bit <<= 1)
+			if (d & bit) {
+				char set[16];
+				snprintf(set, sizeof(set), "%lu", h->uid);
+				r = imap_store(a->im, set, (h->flags & bit) != 0, bit);
+			}
+		if (r > 0) {
+			u.flags[k] = (u.flags[k] & ~d) | (h->flags & d);
+			flags_pushed++;
+		}
+	}
+	if (r <= 0) {
+		free(u.uid);
+		free(u.flags);
+		return imap_failed(a, r);
+	}
 
 	/* drop what was expunged or fell out of the window; update flags */
 	for (i = f->n - 1; i >= 0; i--) {
@@ -371,7 +414,10 @@ int mail_sync_folder(ACCOUNT *a, FINFO *fi, long *newmsgs)
 		str_copy(mail_err, "out of memory", sizeof(mail_err));
 		return 0;
 	}
+	flags_pushed = 0;
 	ok = sync_window(a, fi, f, newmsgs);
+	if (ok && flags_pushed)		/* the counts changed with them */
+		imap_status(a->im, fi->server, &messages, &unseen);
 	if (messages >= 0)
 		fi->total = messages;
 	if (unseen >= 0)
@@ -472,7 +518,7 @@ static int pop_check(ACCOUNT *a, long *newmsgs)
 	c.a = a;
 	status(acct_sec(a, 0) ? "%s: connecting securely to %s..." : "%s: connecting to %s...",
 	       a->name, acct_host(a, 0));
-	c.p = pop3_login(acct_host(a, 0), acct_port(a, 0), acct_sec(a, 0), a->user, a->pass,
+	c.p = pop3_login(acct_host(a, 0), acct_port(a, 0), acct_sec(a, 0), acct_user(a, 0), acct_pass(a, 0),
 			 mail_err, sizeof(mail_err));
 	if (!c.p)
 		return 0;
@@ -508,6 +554,7 @@ static int pop_check(ACCOUNT *a, long *newmsgs)
 int mail_check(ACCOUNT *a, long *newmsgs)
 {
 	int ok, sent;
+	a->cut = 0;			/* checking mail is how to try again */
 	if (a->pop) {
 		ok = pop_check(a, newmsgs);
 	} else {
@@ -586,15 +633,21 @@ char *mail_fetch(FOLDER *f, HDR *h, long *len)
 int mail_flag(FOLDER *f, HDR *h, unsigned short flags, int add)
 {
 	unsigned short nf = add ? (h->flags | flags) : (h->flags & ~flags);
-	if (!f->fi->local && !opt.offline) {
-		char set[16];
-		int r;
-		if (!select_folder(f->acct, f->fi))
-			return 0;
-		snprintf(set, sizeof(set), "%lu", h->uid);
-		r = imap_store(f->acct->im, set, add, flags);
-		if (r <= 0)
-			return imap_failed(f->acct, r);
+	if (!f->fi->local) {
+		/* not connected: change it here, tell the server next time */
+		if (opt.offline || f->acct->cut || !select_folder(f->acct, f->fi)) {
+			if (!opt.offline && !f->acct->cut && !mail_unreachable)
+				return 0;
+			if (nf != h->flags)
+				nf |= MF_FLAGSYNC;
+		} else {
+			char set[16];
+			int r;
+			snprintf(set, sizeof(set), "%lu", h->uid);
+			r = imap_store(f->acct->im, set, add, flags);
+			if (r <= 0)
+				return imap_failed(f->acct, r);
+		}
 	}
 	if (nf != h->flags) {
 		/* IMAP counts come from the server: keep them in step */
@@ -790,9 +843,9 @@ int mail_send_outbox(ACCOUNT *a, int *sent)
 		fold_close(f);
 		return 0;
 	}
-	user = a->smtpuser[0] ? a->smtpuser : a->user;
-	pass = a->smtpuser[0] ? a->smtppass : a->pass;
-	if (!strcmp(user, "-"))
+	user = acct_user(a, 1);
+	pass = acct_pass(a, 1);
+	if (!user)
 		user = "";
 	{
 		const char *at = strchr(a->email, '@');
@@ -834,7 +887,7 @@ int mail_send_outbox(ACCOUNT *a, int *sent)
 		/* keep a copy in Sent (Gmail files it by itself) */
 		if (sentf && sentf->local) {
 			local_copy(f, h, sentf);
-		} else if (sentf && !str_istr(a->smtphost, "gmail") && !str_istr(a->host, "gmail") &&
+		} else if (sentf && !str_istr(acct_host(a, 1), "gmail") && !str_istr(acct_host(a, 0), "gmail") &&
 			   mail_connect(a)) {
 			imap_append(a->im, sentf->server, MF_SEEN, out, sl);
 		}

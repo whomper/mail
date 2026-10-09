@@ -84,10 +84,12 @@ Falcon mode needs:
 - MAIL in fast (TT) RAM if you have it: MAIL.PRG asks TOS for it, and
   TLS runs twice as fast there as in ST RAM
 
-Each account keeps two sets of servers, so you can switch back and forth
-without typing them again: the gateway's (used when Falcon mode is off)
-and the provider's own (used when it is on). With Falcon mode on,
-Options > Accounts > Edit shows the provider's servers. When you switch
+Each account keeps two sets of servers and logins, so you can switch back
+and forth without typing them again: the gateway's (used when Falcon mode
+is off) and the provider's own (used when it is on). Options > Accounts >
+Edit shows the set of the mode you are in, and changing a password in one
+mode leaves the other alone. The first time, Falcon mode's login starts as
+a copy of the gateway's. Your name, address and signature are shared. When you switch
 it on, MAIL fills them in for Gmail, iCloud, Yahoo, GMX, web.de, AOL,
 Fastmail and Zoho from the e-mail address, and names any account whose
 servers you still have to type in. The usual ports:
@@ -256,6 +258,13 @@ is safely on disk.
 
 **Offline** (Options > Work offline): MAIL doesn't connect, and you can
 read everything already on disk. New messages wait in the Outbox.
+
+**Not connected**: when a connection or login fails, MAIL says so once
+and then works from the cache for that account, as if offline: messages
+already on disk open at once, and one that was never downloaded shows a
+note instead of a new attempt. Marking messages read, unread or flagged
+works as usual and reaches the server at the next connection. Check mail
+(^K, or a click on the account's name) or the timed check connects again.
 
 **Settings** (Options > Settings): your time zone in minutes east of UTC
 (Israel: 120 in winter, 180 in summer), automatic checking every N

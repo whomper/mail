@@ -152,6 +152,24 @@ void conn_close(CONN *c)
 	free(c);
 }
 
+void conn_log_login(const char *who, const char *user, const char *pass)
+{
+	char line[160];
+	const char *p;
+	int dashes = 0, spaces = 0, high = 0;
+	if (!conn_logfile[0])
+		return;
+	for (p = pass; *p; p++) {
+		dashes += *p == '-';
+		spaces += *p == ' ';
+		high += (unsigned char)*p >= 0x80;
+	}
+	snprintf(line, sizeof(line), "logging in: user name %d characters%s, password %d characters"
+		 " (%d '-', %d spaces, %d not ASCII)", (int)strlen(user),
+		 strchr(user, '@') ? " with @" : " without @", (int)strlen(pass), dashes, spaces, high);
+	conn_log(who, " -- ", line, (long)strlen(line));
+}
+
 int conn_write(CONN *c, const char *data, long n)
 {
 	if ((c->tls ? tls_write(c->tls, data, n) : net_write(c->h, data, n)) != n) {

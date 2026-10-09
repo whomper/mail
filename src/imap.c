@@ -335,6 +335,7 @@ static IMAP *login_once(const char *host, unsigned short port, int sec, const ch
 		}
 	}
 
+	conn_log_login("IMAP", user, pass);
 	if (imap_has(im, "AUTH=PLAIN") && (imap_has(im, "LOGINDISABLED") || has_8bit(pass, strlen(pass)) ||
 					   has_8bit(user, strlen(user)))) {
 		/* SASL PLAIN copes with any characters in the password */
@@ -377,7 +378,10 @@ static IMAP *login_once(const char *host, unsigned short port, int sec, const ch
 		r = run(im, 2, 0, 0, "LOGIN %s %s", qu, qp);
 	}
 	if (r <= 0) {
-		snprintf(err, errlen, "login failed: %s", im->err);
+		if (strstr(im->err, "AUTHENTICATIONFAILED"))
+			snprintf(err, errlen, "%s refused the user name or password", host);
+		else
+			snprintf(err, errlen, "login failed: %s", im->err);
 		imap_logout(im);
 		return 0;
 	}

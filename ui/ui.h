@@ -162,6 +162,7 @@ void font_menu(void);
 void status(const char *msg);
 void busy(int on);
 void cmd_check_all(void);
+extern int reader_missing;	/* the reader shows a note: the message isn't here */
 void set_hebrew_kbd(short on);
 extern short hebrew_kbd;
 unsigned char key_char(short kstate, short key);	/* honours the Hebrew layout */

@@ -40,6 +40,7 @@ static void free_layout(void)
 
 void reader_clear(void)
 {
+	reader_missing = 0;
 	free_layout();
 	mime_free(cur_msg);
 	cur_msg = 0;
@@ -140,6 +141,48 @@ static char *expand_tabs(const char *s, long n, long *outlen)
 	return sb_steal(&b);
 }
 
+int reader_missing;
+
+static char *dup0(const char *s)
+{
+	return strdup(s ? s : "");
+}
+
+/* a message that isn't in the cache while MAIL can't connect: say so in
+   the reader, with what the list knows about it */
+static MSG *missing_note(HDR *h, ACCOUNT *a)
+{
+	MSG *m = calloc(1, sizeof(MSG));
+	SBUF t;
+	if (!m)
+		return 0;
+	m->from = dup0(h->from);
+	m->to = dup0(h->to);
+	m->subject = dup0(h->subject);
+	m->cc = dup0(0);
+	m->reply_to = dup0(0);
+	m->date = dup0(0);
+	m->message_id = dup0(0);
+	m->references = dup0(0);
+	m->in_reply_to = dup0(0);
+	m->list_post = dup0(0);
+	sb_init(&t);
+	sb_adds(&t, "This message hasn't been downloaded yet.\n\n");
+	if (opt.offline)
+		sb_adds(&t, "MAIL is working offline: switch it off in the Options menu to read it.\n");
+	else
+		sb_printf(&t, "%s is not connected, so MAIL shows what it has in the cache.\n"
+			      "Check mail (^K, or click the account's name) to connect again.\n\n%s\n",
+			  a->name, a->cuterr);
+	m->textlen = t.len;
+	m->text = sb_steal(&t);
+	if (!m->text || !m->from || !m->subject) {
+		mime_free(m);
+		return 0;
+	}
+	return m;
+}
+
 void reader_show(HDR *h)
 {
 	long len;
@@ -151,6 +194,17 @@ void reader_show(HDR *h)
 	mail_err[0] = 0;
 	raw = mail_fetch(cur_folder, h, &len);
 	busy(0);
+	reader_missing = 0;
+	if (!raw && mail_unreachable) {
+		MSG *m = missing_note(h, cur_folder->acct);
+		if (m) {
+			reader_clear();
+			reader_missing = 1;
+			cur_msg = m;
+			cur_uid = h->uid;
+			goto show;
+		}
+	}
 	if (!raw) {
 		alert(1, "[1][%s][ OK ]", mail_err[0] ? mail_err : "Can't read this message.");
 		return;
@@ -164,6 +218,7 @@ void reader_show(HDR *h)
 		alert(1, "[1][Not enough memory to show|this message.][ OK ]");
 		return;
 	}
+show:
 	sb_init(&hb);
 	sb_printf(&hb, "From: %s\n", cur_msg->from);
 	if (cur_msg->to[0])

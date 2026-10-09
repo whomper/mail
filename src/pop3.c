@@ -53,6 +53,7 @@ static POP3 *login_once(const char *host, unsigned short port, int sec, const ch
 			return 0;
 		}
 	}
+	conn_log_login("POP3", user, pass);
 	conn_cmd(p->c, 1, "USER %s", user);
 	r = reply(p);
 	if (r > 0) {

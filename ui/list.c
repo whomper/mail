@@ -43,6 +43,8 @@ void list_titles(void)
 	win_title(&w_list, t);
 	if (opt.offline)
 		snprintf(i, sizeof(i), "%ld unread  (offline)", cur_finfo->unread);
+	else if (cur_acct->cut && !cur_finfo->local)
+		snprintf(i, sizeof(i), "%ld unread  (not connected: Check mail tries again)", cur_finfo->unread);
 	else
 		snprintf(i, sizeof(i), "%ld of %ld, %ld unread", cur_folder->n,
 			 cur_finfo->total > cur_folder->n ? cur_finfo->total : cur_folder->n, cur_finfo->unread);
@@ -253,8 +255,8 @@ static void load_more(void)
 		return;
 	if (cur_finfo->local) {
 		shown += opt.page;
-	} else if (opt.offline) {
-		alert(1, "[1][MAIL is working offline.|Older messages are on the server.][ OK ]");
+	} else if (opt.offline || cur_acct->cut) {
+		alert(1, "[1][MAIL is not connected.|Older messages are on the server:|Check mail to connect again.][ OK ]");
 		return;
 	} else {
 		busy(1);

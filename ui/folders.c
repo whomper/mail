@@ -134,7 +134,7 @@ void folders_select(ACCOUNT *a, FINFO *fi)
 	if (!fi->local && !opt.offline) {
 		busy(1);
 		mail_err[0] = 0;
-		if (!mail_sync_folder(a, fi, &newmsgs) && mail_err[0])
+		if (!mail_sync_folder(a, fi, &newmsgs) && mail_err[0] && !mail_unreachable)
 			alert(1, "[1][%s][ OK ]", mail_err);
 		busy(0);
 		if (cur_folder)

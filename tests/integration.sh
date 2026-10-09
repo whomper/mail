@@ -173,6 +173,41 @@ run sync 1 INBOX >/dev/null
 out=$(run list 1 INBOX)
 expect "flag stored on the server and synced back" "^$U1	 !" "$out"
 
+# not connected: what is cached still reads, a message that isn't says
+# why, and read/flag changes wait for the next connection
+U2=$(uid_of "$out" "מכתב")
+cp "$W/MAIL.INF" "$W/MAIL.INF.net"
+python3 - "$W/MAIL.INF" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p, newline="").read()
+i = s.index("[account]", s.index("[account]") + 1)   # the first account only
+s = re.sub(r"(?m)^(d?port)=\d+", r"\1=9", s[:i]) + s[i:]   # nothing listens there
+open(p, "w", newline="").write(s)
+PY
+out=$(run flag 1 INBOX "$U1" -seen)
+expect "not connected: marked unread here" "^ok" "$out"
+out=$(run show 1 INBOX "$U1")
+expect "not connected: a cached message still reads" "שלום 1990" "$out"
+out=$(run flag 1 INBOX "$U1" -seen)
+out=$(run show 1 INBOX "$U2")
+expect "not connected: an uncached message says why" "not connected\|can't connect\|refused" "$out"
+cp "$W/MAIL.INF.net" "$W/MAIL.INF"
+run sync 1 INBOX >/dev/null
+srv=$(python3 - $IMAP "$U1" <<'PY'
+import imaplib, sys
+m = imaplib.IMAP4("127.0.0.1", int(sys.argv[1]))
+m.login("dana", "secret")
+m.select("INBOX")
+print(m.uid("FETCH", sys.argv[2], "(FLAGS)")[1][0].decode())
+PY
+)
+if grep -q "Flagged" <<<"$srv" && ! grep -q "Seen" <<<"$srv"; then PASS=$((PASS+1)); echo "ok   offline change reached the server"
+else FAIL=$((FAIL+1)); echo "FAIL offline change not on the server: $srv"; fi
+out=$(run list 1 INBOX)
+expect "and stays after the sync" "^$U1	N!" "$out"
+run flag 1 INBOX "$U1" +seen >/dev/null
+
 cat > "$W/msg.txt" <<'MSG'
 To: Dana <dana@test.local>
 Cc:
@@ -281,6 +316,25 @@ if [ -n "${FALCON:-}" ]; then
   out=$(run folders 1)
   expect "IMAP STARTTLS" "^Sent " "$out"
   grep -q "^IMAP >> T[0-9]* STARTTLS" "$W/MAIL.LOG" && { PASS=$((PASS+1)); echo "ok   IMAP sent STARTTLS"; } || { FAIL=$((FAIL+1)); echo "FAIL IMAP STARTTLS not in the log"; }
+  cp "$W/MAIL.INF.keep" "$W/MAIL.INF"
+
+  # Falcon mode has its own password: a wrong one there fails in words,
+  # and the log shows the login's shape but not the login
+  cp "$W/MAIL.INF" "$W/MAIL.INF.keep"
+  python3 - "$W/MAIL.INF" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p, newline="").read()
+i = s.index("[account]", s.index("[account]") + 1)   # end of the first account
+s = s[:i] + "duser=dana\r\ndpass=wrong-pass\r\n" + s[i:]
+open(p, "w", newline="").write(s)
+PY
+  out=$(run folders 1)
+  expect "wrong Falcon-mode password refused, in words" "refused the user name or password" "$out"
+  grep -q "^IMAP -- logging in: user name 4 characters without @, password 10 characters (1 '-'" "$W/MAIL.LOG" \
+    && { PASS=$((PASS+1)); echo "ok   login shape in the log"; } || { FAIL=$((FAIL+1)); echo "FAIL no login shape in the log"; }
+  grep -q "wrong-pass" "$W/MAIL.LOG" && { FAIL=$((FAIL+1)); echo "FAIL password in the log"; } || { PASS=$((PASS+1)); echo "ok   password not in the log"; }
+  grep -q "^pass=secret" "$W/MAIL.INF" && { PASS=$((PASS+1)); echo "ok   the gateway's password kept apart"; } || { FAIL=$((FAIL+1)); echo "FAIL gateway password changed"; }
   cp "$W/MAIL.INF.keep" "$W/MAIL.INF"
 
   # a server whose certificate no trusted authority signed
