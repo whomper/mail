@@ -11,7 +11,8 @@
 
 enum {
 	CS_ASCII, CS_UTF8, CS_LATIN1, CS_LATIN15, CS_CP1252, CS_ISO8859_8,
-	CS_CP1255, CS_ATARI
+	CS_CP1255, CS_ATARI,
+	CS_ATARI_VISUAL		/* the Falcon mail proxy's x-atari-st: Atari text, display order */
 };
 
 int cs_id(const char *name);			/* charset name -> CS_*, unknown -> CS_LATIN1 */

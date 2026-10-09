@@ -39,6 +39,10 @@ int cs_id(const char *name)
 		return CS_CP1255;
 	if (!strcmp(n, "atari") || !strcmp(n, "atarist"))
 		return CS_ATARI;
+	/* falcon_imap_logproxy.py (whomper/atari_web), made for Troll: bodies
+	   say x-atari-st, Subject and From words just "x" */
+	if (!strcmp(n, "x-atari-st") || !strcmp(n, "x"))
+		return CS_ATARI_VISUAL;
 	return CS_LATIN1;	/* iso-8859-1 and anything unknown */
 }
 
@@ -240,30 +244,75 @@ static int looks_atari_hebrew(const u8 *s, long n, int cs)
  * the Latin word that ended a Hebrew sentence. */
 int cs_bridge_visual = 1;
 
+static int is_heb(unsigned char c)
+{
+	return c >= 0xC2 && c <= 0xDC;
+}
+
+static int is_latin(unsigned char c)
+{
+	return ((c | 0x20) >= 'a' && (c | 0x20) <= 'z') || (c >= 0x80 && !is_heb(c) && c < 0xB0);
+}
+
+/* The proxy gives each paragraph (lines up to a blank one) the direction
+ * of its first letter, and turns its lines around for that direction. In
+ * display order a left-to-right paragraph begins, at the left, with that
+ * Latin letter; a right-to-left one with its last word or a full stop. */
 static void to_logical(char *s, long n)
 {
 	char tmp[BIDI_MAX];
-	long start = 0, i;
-	for (i = 0; i <= n; i++) {
-		if (i < n && s[i] != '\n')
-			continue;
-		{
-			long len = i - start, k, heb = 0, lat = 0;
-			char *line = s + start;
-			for (k = 0; k < len; k++) {
-				unsigned char c = (unsigned char)line[k];
-				if (c >= 0xC2 && c <= 0xDC)
-					heb++;
-				else if ((c | 0x20) >= 'a' && (c | 0x20) <= 'z')
-					lat++;
+	long i = 0;
+	while (i < n) {
+		long pend = i, k, ls;
+		short rtl = -1;
+		/* the paragraph: lines up to an empty one (an empty line alone
+		   is a paragraph of its own, with nothing to turn) */
+		for (;;) {
+			long e = pend;
+			short blank = 1;
+			while (e < n && s[e] != '\n') {
+				if (s[e] != ' ' && s[e] != '\r')
+					blank = 0;
+				e++;
 			}
-			if (len > 0 && len <= BIDI_MAX && heb) {
-				short cr = line[len - 1] == '\r';
-				bidi_visual(line, (short)(len - cr), heb >= lat, tmp);
-				memcpy(line, tmp, len - cr);
+			if (blank && pend > i)
+				break;
+			pend = e < n ? e + 1 : e;
+			if (blank || pend >= n)
+				break;
+		}
+		/* its direction, from the first line with a letter */
+		for (k = i; k < pend && rtl < 0; k++) {
+			unsigned char c = (unsigned char)s[k];
+			if (is_heb(c))
+				rtl = 1;
+			else if (is_latin(c)) {
+				/* a line of Latin only is left alone by the proxy, and
+				   says the paragraph is left to right */
+				rtl = 0;
 			}
 		}
-		start = i + 1;
+		if (rtl < 0)
+			rtl = 1;
+		/* turn the lines around */
+		for (ls = i; ls < pend; ) {
+			long le = ls, len;
+			short has = 0;
+			while (le < pend && s[le] != '\n')
+				le++;
+			len = le - ls;
+			if (len && s[ls + len - 1] == '\r')
+				len--;
+			for (k = ls; k < ls + len; k++)
+				if (is_heb((unsigned char)s[k]))
+					has = 1;
+			if (has && len <= BIDI_MAX) {
+				bidi_visual(s + ls, (short)len, rtl, tmp);
+				memcpy(s + ls, tmp, len);
+			}
+			ls = le + 1;
+		}
+		i = pend;
 	}
 }
 
@@ -275,7 +324,10 @@ char *cs_to_atari(const char *src, long n, int cs, long *outlen)
 	long i = 0;
 	if (!out)
 		return 0;
-	if (cs != CS_ATARI && looks_atari_hebrew(s, n, cs)) {
+	if (cs == CS_ATARI_VISUAL) {
+		cs = CS_ATARI;
+		bridged = cs_bridge_visual;
+	} else if (cs != CS_ATARI && looks_atari_hebrew(s, n, cs)) {
 		cs = CS_ATARI;
 		bridged = cs_bridge_visual;
 	}
@@ -498,16 +550,15 @@ char *qp_encode(const char *src, long n, long *outlen)
 /* ---------------- RFC 2047 header words ---------------- */
 
 /* if s starts an encoded word, decode it, append to *p, return its length */
-static long try_word(const char *s, char **p)
+/* one RFC 2047 word at s: its decoded bytes and charset; 0 if it isn't one */
+static long try_word(const char *s, char **raw, long *rawlen, char *cs)
 {
 	const char *cs_end, *enc_end, *end;
-	char cs[40], *raw, *conv;
-	long rawlen, convlen;
 	int b;
 	if (s[0] != '=' || s[1] != '?')
 		return 0;
 	cs_end = strchr(s + 2, '?');
-	if (!cs_end || cs_end - (s + 2) >= (long)sizeof(cs) || !cs_end[1] || cs_end[2] != '?')
+	if (!cs_end || cs_end - (s + 2) >= 40 || !cs_end[1] || cs_end[2] != '?')
 		return 0;
 	b = toupper((u8)cs_end[1]) == 'B';
 	if (!b && toupper((u8)cs_end[1]) != 'Q')
@@ -520,18 +571,35 @@ static long try_word(const char *s, char **p)
 	cs[cs_end - (s + 2)] = 0;
 	if (strchr(cs, '*'))		/* RFC 2231 language tag */
 		*strchr(cs, '*') = 0;
-	raw = b ? base64_decode(enc_end, end - enc_end, &rawlen)
-		: qp_decode(enc_end, end - enc_end, 1, &rawlen);
-	if (!raw)
+	*raw = b ? base64_decode(enc_end, end - enc_end, rawlen)
+		 : qp_decode(enc_end, end - enc_end, 1, rawlen);
+	if (!*raw)
 		return 0;
-	conv = cs_to_atari(raw, rawlen, cs_id(cs), &convlen);
-	free(raw);
+	return end + 2 - s;
+}
+
+/* Adjacent words in the same charset are joined before converting: a
+ * UTF-8 letter may be split between two of them, and a bridge's Hebrew
+ * line in display order must be turned around as a whole. */
+typedef struct {
+	char *buf;
+	long len;
+	char cs[40];
+} PENDING;
+
+static void flush(PENDING *pd, char **p)
+{
+	char *conv;
+	long convlen;
+	if (!pd->len)
+		return;
+	conv = cs_to_atari(pd->buf, pd->len, cs_id(pd->cs), &convlen);
 	if (conv) {
 		memcpy(*p, conv, convlen);
 		*p += convlen;
 		free(conv);
 	}
-	return end + 2 - s;
+	pd->len = 0;
 }
 
 char *hdr_decode(const char *v)
@@ -540,32 +608,42 @@ char *hdr_decode(const char *v)
 	char *out = malloc(n * 3 + 1), *p = out;
 	const char *s = v;
 	int last_word = 0;
+	PENDING pd;
 	if (!out)
 		return 0;
+	pd.buf = malloc(n + 1);
+	pd.len = 0;
+	pd.cs[0] = 0;
+	if (!pd.buf) {
+		free(out);
+		return 0;
+	}
 	while (*s) {
-		long used = try_word(s, &p);
+		char cs[40], *raw;
+		long rawlen, used;
+		const char *t = s;
+		if (last_word)		/* whitespace between two encoded words disappears */
+			while (*t == ' ' || *t == '\t' || *t == '\r' || *t == '\n')
+				t++;
+		used = try_word(t, &raw, &rawlen, cs);
 		if (used) {
-			s += used;
+			if (pd.len && strcasecmp(pd.cs, cs))
+				flush(&pd, &p);
+			strcpy(pd.cs, cs);
+			memcpy(pd.buf + pd.len, raw, rawlen);	/* decoded words are shorter */
+			pd.len += rawlen;
+			free(raw);
+			s = t + used;
 			last_word = 1;
 			continue;
 		}
-		if (last_word && (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n')) {
-			/* whitespace between two encoded words disappears */
-			const char *t = s;
-			while (*t == ' ' || *t == '\t' || *t == '\r' || *t == '\n')
-				t++;
-			used = try_word(t, &p);
-			if (used) {
-				s = t + used;
-				continue;
-			}
-		}
+		flush(&pd, &p);
 		last_word = 0;
 		{
 			/* raw text: 8-bit here is usually UTF-8 (or Latin-1) */
-			const char *t = s;
 			char *conv;
 			long cl;
+			t = s;
 			while (*t && !(t[0] == '=' && t[1] == '?'))
 				t++;
 			if (t == s)
@@ -580,6 +658,8 @@ char *hdr_decode(const char *v)
 			s = t;
 		}
 	}
+	flush(&pd, &p);
+	free(pd.buf);
 	*p = 0;
 	return out;
 }

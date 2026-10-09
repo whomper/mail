@@ -64,16 +64,19 @@ on the local network.
 ## Next to another bridge
 
 MAIL converts mail to the Atari character set itself, Hebrew included, so
-it only needs a plain TLS tunnel. A bridge made for older programs such
-as Troll, which converts the text on the Pi, also works: MAIL notices
-Hebrew that is already in Atari characters. If that bridge already uses
-the usual ports, give MAIL's gateway others:
+it only needs a plain TLS tunnel. It also works through the Falcon mail
+proxy made for Troll (`falcon_imap_logproxy.py` in
+[whomper/atari_web](https://github.com/whomper/atari_web), `--hebrew-mode
+glyph`): MAIL recognises its `x-atari-st` text and puts the Hebrew back
+into reading order. That proxy rewrites messages for Troll, though: it
+drops HTML, wraps Hebrew at 60 columns and, for IMAP only, changes what a
+forwarded message carries, so for MAIL this plain tunnel is the better
+choice. The two run side by side (the proxy on 143, this gateway on 1143
+and 1025); if another bridge already has these ports, pick others:
 
 ```
-sudo ./install.sh --ports 2143,2025,2110 imap.gmail.com smtp.gmail.com
+sudo ./install.sh --ports 2143,2025,2110 imap.mail.me.com smtp.mail.me.com
 ```
-
-and type those ports into MAIL's account dialog.
 
 ## Keeping it private
 
