@@ -161,7 +161,9 @@ int main(void)
 	int i;
 
 	say("\033E TLSBENCH - TLS handshake pieces on this Atari (BearSSL 0.6)\r\n");
-	say(" _CPU %ld  _FPU %08lx  _MCH %08lx\r\n\r\n", cpu, fpu, mch);
+	say(" _CPU %ld  _FPU %08lx  _MCH %08lx\r\n", cpu, fpu, mch);
+	say(" running in %s RAM (program at %08lx)\r\n\r\n",
+	    (unsigned long)main >= 0x01000000UL ? "fast (Alt/TT)" : "ST", (unsigned long)main);
 	for (i = 0; i < (int)sizeof(buf); i++)
 		buf[i] = (unsigned char)(i * 7);
 	for (i = 0; i < 32; i++)

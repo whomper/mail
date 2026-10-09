@@ -23,4 +23,22 @@ Run `build.sh` to rebuild them (needs `a56`, see the script).
 | Handshake, 2 x X25519 + 3 RSA checks | about 9.6 s | about 0.5 s |
 | ChaCha20-Poly1305 / AES-128-GCM | 39 / 16 KB/s | |
 
-Real hardware may differ: run both programs on a real Falcon.
+Hatari runs the DSP twice as fast as the real one.
+
+## Real Falcon, 68030 at 50 MHz on a DFB1X board, with fast RAM
+
+| | 68030 in ST-RAM | 68030 in fast RAM | DSP56001 |
+|---|---|---|---|
+| X25519 | 1545 ms | 517 ms | about 370 ms (estimate: 2550 x 145 us) |
+| RSA-2048 signature check | 3415 ms | 1342 ms | about 120 ms (19 x 6.35 ms) |
+| ECDSA P-256 check | 13235 ms | 3225 ms | |
+| Handshake, 2 x X25519 + 3 RSA checks | 13.3 s | 5.0 s | |
+| ChaCha20-Poly1305 / AES-128-GCM | 24 / 9 KB/s | 66 / 33 KB/s | |
+
+Programs must run from fast RAM: ST-RAM is 16 bits wide and shared with
+the video, and holds a 50 MHz 68030 back to below the speed of a stock
+16 MHz one. The programs here (and MAIL.PRG) ask TOS for fast RAM in
+their header (PRGFLAGS=7 for tools/elf2tos.py).
+
+Best split: X25519 on the 68030 (about 0.5 s each), the RSA signature
+checks on the DSP (about 0.12 s each): a handshake in about 1.5 s.

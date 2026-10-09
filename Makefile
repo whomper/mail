@@ -32,7 +32,7 @@ HDRS    := $(wildcard src/*.h atari/*.h atari/include/*.h ui/*.h)
 all: MAIL.PRG
 
 MAIL.PRG: $(OBJDIR)/mail.elf tools/elf2tos.py
-	python3 tools/elf2tos.py $< $@
+	PRGFLAGS=7 python3 tools/elf2tos.py $< $@
 
 $(OBJDIR)/mail.elf: $(OBJS) atari/link.ld
 	$(CC) $(LDFLAGS) -o $@ $(OBJS)

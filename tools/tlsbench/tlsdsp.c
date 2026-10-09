@@ -126,7 +126,9 @@ int main(void)
 	long mch = get_cookie(0x5F4D4348L), snd = get_cookie(0x5F534E44L);
 
 	say("\033E TLSDSP - TLS arithmetic on the Falcon's DSP56001\r\n");
-	say(" _MCH %08lx  _SND %08lx\r\n\r\n", mch, snd);
+	say(" _MCH %08lx  _SND %08lx\r\n", mch, snd);
+	say(" running in %s RAM (program at %08lx)\r\n\r\n",
+	    (unsigned long)main >= 0x01000000UL ? "fast (Alt/TT)" : "ST", (unsigned long)main);
 	if (!(snd & 8)) {
 		say("No DSP here (_SND bit 3).\r\nPress a key.\r\n");
 		Bconin(2);

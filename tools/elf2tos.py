@@ -5,6 +5,7 @@ into an Atari TOS executable (.PRG / .APP) with a GEMDOS fixup table.
 Only absolute 32-bit relocations (R_68K_32) need fixups; PC-relative
 ones are position independent already.
 """
+import os
 import struct
 import sys
 
@@ -30,6 +31,10 @@ def read_elf(path):
 
 
 def main():
+    # PRGFLAGS: the header's program flags; 7 = fast load, program and
+    # its memory in Alt/TT RAM (the fast RAM of a TT or an accelerated
+    # Falcon) when there is some
+    flags = int(os.environ.get("PRGFLAGS", "0"), 0)
     if len(sys.argv) != 3:
         sys.exit("usage: elf2tos.py input.elf output.prg")
     data, secs = read_elf(sys.argv[1])
@@ -85,7 +90,7 @@ def main():
     else:
         reloc += b"\0\0\0\0"
 
-    hdr = struct.pack(">HIIIIIIH", 0x601A, tsize, dsize, bsize, 0, 0, 0, 0)
+    hdr = struct.pack(">HIIIIIIH", 0x601A, tsize, dsize, bsize, 0, 0, flags, 0)
     with open(sys.argv[2], "wb") as f:
         f.write(hdr + image + reloc)
     print("%s: text %d, data %d, bss %d, %d fixups" % (sys.argv[2], tsize, dsize, bsize, len(fixups)))

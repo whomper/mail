@@ -34,10 +34,10 @@ rm -f "$W/libbearssl.a"
 m68k-linux-gnu-ar rcs "$W/libbearssl.a" "$W"/obj/*.o
 $CC $CF -Wall -c -o "$W/tlsbench.o" "$H/tlsbench.c"
 $CC $LF -o "$W/tlsbench.elf" $RT "$W/tlsbench.o" "$W/libbearssl.a" -lgcc
-python3 "$M/tools/elf2tos.py" "$W/tlsbench.elf" "$H/TLSB030.PRG"
+PRGFLAGS=7 python3 "$M/tools/elf2tos.py" "$W/tlsbench.elf" "$H/TLSB030.PRG"
 
 # the DSP program and its test vectors
 (cd "$W" && rm -f a56.out && a56 "$H/mont.a56" >/dev/null && python3 "$H/gen.py")
 $CC $CF -Wno-array-bounds -c -o "$W/tlsdsp.o" "$H/tlsdsp.c"
 $CC $LF -o "$W/tlsdsp.elf" $RT "$W/tlsdsp.o" -lgcc
-python3 "$M/tools/elf2tos.py" "$W/tlsdsp.elf" "$H/TLSDSP.PRG"
+PRGFLAGS=7 python3 "$M/tools/elf2tos.py" "$W/tlsdsp.elf" "$H/TLSDSP.PRG"
