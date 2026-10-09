@@ -81,6 +81,14 @@ sudo ./install.sh --ports 1143,1025,1110 imap.mail.me.com smtp.mail.me.com:587
 
 ## Keeping it private
 
+If the Pi's firewall (ufw) is on, let the Atari in on the gateway's ports,
+or it can't connect:
+
+```
+sudo ufw allow from ATARI_IP to any port 143 proto tcp
+sudo ufw allow from ATARI_IP to any port 587 proto tcp
+```
+
 Between the Atari and the Pi the connection is not encrypted, as on
 every network in the 1990s: keep the gateway on your home network, never
 forward its ports on your router. If others share your network,

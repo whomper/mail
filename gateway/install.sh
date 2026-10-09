@@ -116,6 +116,14 @@ if [ -n "$ALLOW" ]; then
   else
     echo "ufw is not installed: anyone on your network can use the gateway." >&2
   fi
+elif command -v ufw >/dev/null && ufw status | grep -q "^Status: active"; then
+  # a firewall is on: without a rule the Atari can't reach the gateway
+  for p in $P_IMAP $P_SMTP; do
+    if ! ufw status | grep -Eq "^$p(/tcp)?[[:space:]]+ALLOW"; then
+      echo "WARNING: the firewall (ufw) is on and doesn't let anyone in on port $p." >&2
+      echo "         Allow your Atari: sudo ufw allow from ATARI_IP to any port $p proto tcp" >&2
+    fi
+  done
 fi
 
 sleep 2
