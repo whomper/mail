@@ -139,12 +139,15 @@ void list_after_remove(void)
 
 static short wide;	/* room for the year and the size column */
 
+/* the marks column: up to three marks from the left edge, then a space */
+#define MK 4
+
 static void columns(short cols, short *c_from, short *c_subj, short *c_date)
 {
 	short rest;
 	wide = cols >= 76;
 	*c_date = wide ? 15 : 12;
-	rest = cols - 3 - *c_date - (wide ? 6 : 0);
+	rest = cols - MK - *c_date - (wide ? 6 : 0);
 	*c_from = rest / 3;
 	if (*c_from > 24)
 		*c_from = 24;
@@ -177,9 +180,9 @@ static void draw(WIN *w, GRECT *clip)
 	/* column titles */
 	{
 		const char *who = show_to() ? "To" : "From";
-		text_at(x0 + 3 * cw, w->work.y + 1, who, strlen(who), c_from, TX_BOLD);
-		text_at(x0 + (4 + c_from) * cw, w->work.y + 1, "Subject", 7, c_subj, TX_BOLD);
-		text_at(x0 + (4 + c_from + c_subj) * cw, w->work.y + 1, "Date", 4, c_date, TX_BOLD);
+		text_at(x0 + MK * cw, w->work.y + 1, who, strlen(who), c_from, TX_BOLD);
+		text_at(x0 + (MK + 1 + c_from) * cw, w->work.y + 1, "Subject", 7, c_subj, TX_BOLD);
+		text_at(x0 + (MK + 1 + c_from + c_subj) * cw, w->work.y + 1, "Date", 4, c_date, TX_BOLD);
 		hline(w->work.x, w->work.x + w->work.w - 1, w->work.y + w->head_h - 2);
 	}
 	if (!cur_folder) {
@@ -203,7 +206,7 @@ static void draw(WIN *w, GRECT *clip)
 		r.w = w->work.w;
 		r.h = ch;
 		fill(&r, sel == nview ? 1 : 0);
-		text_at(x0 + 3 * cw, y, t, strlen(t), cols - 3, TX_BOLD | (sel == nview ? TX_INVERSE : 0));
+		text_at(x0 + MK * cw, y, t, strlen(t), cols - MK, TX_BOLD | (sel == nview ? TX_INVERSE : 0));
 	}
 	for (i = w->top; i < nview && i < w->top + rows; i++) {
 		HDR *h = &cur_folder->h[view[i]];
@@ -221,19 +224,26 @@ static void draw(WIN *w, GRECT *clip)
 		}
 		if (!(h->flags & MF_SEEN))
 			fl |= TX_BOLD;
-		marks[0] = (h->flags & MF_SEEN) ? ' ' : '\xf9';		/* bullet */
-		marks[1] = (h->flags & MF_FLAGGED) ? '!' : (h->flags & MF_ANSWERED) ? 'R' : ' ';
-		marks[2] = (h->flags & MF_ATTACH) ? '@' : ' ';
-		marks[3] = 0;
-		text_at(x0, y, marks, 3, 3, fl & ~TX_BOLD);
+		/* the marks there are, from the start of the line */
+		{
+			short k = 0;
+			if (!(h->flags & MF_SEEN))
+				marks[k++] = '\xf9';		/* bullet */
+			if (h->flags & (MF_FLAGGED | MF_ANSWERED))
+				marks[k++] = (h->flags & MF_FLAGGED) ? '!' : 'R';
+			if (h->flags & MF_ATTACH)
+				marks[k++] = '@';
+			marks[k] = 0;
+			text_at(x0, y, marks, k, MK - 1, fl & ~TX_BOLD);
+		}
 		/* "Name <a@b>" shows as Name */
 		addr_split(who ? who : "", name, sizeof(name), 0, 0);
 		if (!name[0])
 			addr_split(who ? who : "", 0, 0, name, sizeof(name));
-		text_at(x0 + 3 * cw, y, name, strlen(name), c_from, fl | TX_RIGHT);
-		text_at(x0 + (4 + c_from) * cw, y, h->subject, strlen(h->subject), c_subj - 1, fl | TX_RIGHT);
+		text_at(x0 + MK * cw, y, name, strlen(name), c_from, fl | TX_RIGHT);
+		text_at(x0 + (MK + 1 + c_from) * cw, y, h->subject, strlen(h->subject), c_subj - 1, fl | TX_RIGHT);
 		date_str(h->date, date, sizeof(date), wide);
-		text_at(x0 + (4 + c_from + c_subj) * cw, y, date, strlen(date), c_date, fl & ~TX_BOLD);
+		text_at(x0 + (MK + 1 + c_from + c_subj) * cw, y, date, strlen(date), c_date, fl & ~TX_BOLD);
 		if (wide) {
 			size_str(h->size, size);
 			text_at(x0 + (cols - 6) * cw, y, size, strlen(size), 5, fl & ~TX_BOLD);
