@@ -139,8 +139,9 @@ void list_after_remove(void)
 
 static short wide;	/* room for the year and the size column */
 
-/* the marks column: up to three marks from the left edge, then a space */
-#define MK 4
+/* the marks column: ! or R, and @, from the left edge, then a space.
+   Unread messages are bold. */
+#define MK 3
 
 static void columns(short cols, short *c_from, short *c_subj, short *c_date)
 {
@@ -227,8 +228,6 @@ static void draw(WIN *w, GRECT *clip)
 		/* the marks there are, from the start of the line */
 		{
 			short k = 0;
-			if (!(h->flags & MF_SEEN))
-				marks[k++] = '\xf9';		/* bullet */
 			if (h->flags & (MF_FLAGGED | MF_ANSWERED))
 				marks[k++] = (h->flags & MF_FLAGGED) ? '!' : 'R';
 			if (h->flags & MF_ATTACH)
