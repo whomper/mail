@@ -81,6 +81,8 @@ void hline(short x1, short x2, short y);
 /* word wrap: start of each line of text into breaks[]; returns count */
 long wrap_text(const char *s, long n, short width, long *breaks, long max);
 short line_rtl(const char *s, long n);
+/* move Hebrew letters to where the font has them (HEB_*), in place */
+void heb_font_map(char *s, long n, short where);
 
 /* views */
 void folders_build(void);
@@ -118,6 +120,15 @@ int  dlg_ask(const char *title, const char *label, char *buf, short len);
 FINFO *dlg_pick_folder(ACCOUNT *a, const char *title);
 ACCOUNT *dlg_pick_account(const char *title);
 void dlg_about(void);
+
+/* the dialog builder (dialogs.c): sizes in characters */
+void   d_begin(short w, short h);
+short  d_add(short type, short flags, short state, long spec, short x, short y, short w, short h);
+short  d_text(short x, short y, const char *s);
+short  d_button(short x, short y, short w, const char *s, short flags);
+short  d_check(short x, short y, const char *s, short on);
+void   d_end(void);
+OBJECT *d_tree(void);
 short alert(short def, const char *fmt, ...);
 
 /* menu commands (main.c) */

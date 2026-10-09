@@ -52,6 +52,38 @@ short line_rtl(const char *s, long n)
 	return bidi_has_rtl(s, (short)n) && bidi_is_rtl(s, (short)n);
 }
 
+/* Text is kept in the Atari character set, Hebrew at 0xC2-0xDC. Some
+ * fonts (Israeli system fonts, many GDOS fonts) have the letters where
+ * ISO-8859-8 or DOS 862 put them; Options > Font says which, and the
+ * letters are moved there just before drawing. */
+static const unsigned char heb_order[27] = {
+	/* alef..nun (0xC2-0xCF) */ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 14, 16,
+	/* samekh..tav (0xD0-0xD7) */ 17, 18, 20, 22, 23, 24, 25, 26,
+	/* final nun, kaf, mem, pe, tsadi (0xD8-0xDC) */ 15, 10, 13, 19, 21
+};
+
+void heb_font_map(char *s, long n, short where)
+{
+	long i;
+	unsigned char base = where == HEB_ISO ? 0xE0 : 0x80;
+	if (where != HEB_ISO && where != HEB_DOS)
+		return;
+	for (i = 0; i < n; i++) {
+		unsigned char c = (unsigned char)s[i];
+		if (c >= 0xC2 && c <= 0xDC)
+			s[i] = (char)(base + heb_order[c - 0xC2]);
+	}
+}
+
+static int has_heb(const char *s, long n)
+{
+	long i;
+	for (i = 0; i < n; i++)
+		if ((unsigned char)s[i] >= 0xC2 && (unsigned char)s[i] <= 0xDC)
+			return 1;
+	return 0;
+}
+
 void text_at(short x, short y, const char *s, long n, short cols, short flags)
 {
 	char vis[BIDI_MAX];
@@ -71,6 +103,12 @@ void text_at(short x, short y, const char *s, long n, short cols, short flags)
 		out = vis;
 		if (rtl && (flags & TX_RIGHT))
 			x += (cols - (short)n) * cw;
+	}
+	if (opt.hebfont != HEB_ATARI && has_heb(out, n)) {
+		if (out != vis)
+			memcpy(vis, out, n);
+		out = vis;
+		heb_font_map(vis, n, opt.hebfont);
 	}
 	vswr_mode(vdi_h, 2);
 	vst_color(vdi_h, (flags & TX_INVERSE) ? 0 : 1);

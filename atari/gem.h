@@ -114,6 +114,7 @@ short appl_exit(void);
 short graf_handle(short *wchar, short *hchar, short *wbox, short *hbox);
 short graf_mouse(short num, void *form);
 short graf_mkstate(short *mx, short *my, short *mb, short *ks);
+short graf_rubberbox(short x, short y, short minw, short minh, short *w, short *h);
 void evnt_set_m1(short leave, short x, short y, short w, short h);
 short menu_bar(OBJECT *tree, short show);
 short menu_tnormal(OBJECT *tree, short title, short normal);
@@ -192,6 +193,7 @@ void vq_extnd(short h, short owflag, short *work_out);
 short vq_gdos(void);			/* 1 if a GDOS (NVDI, SpeedoGDOS...) is loaded */
 short vst_load_fonts(short h, short select);
 short vqt_name(short h, short index, char *name);	/* -> font id; name of 33 chars */
+short vqt_font_format(short h, short index);	/* 1 bitmap, 2 Speedo, 4 TrueType, 8 Type 1, 0 unknown */
 short vst_font(short h, short id);
 short vst_point(short h, short point, short *cw, short *ch);
 short vqt_width(short h, short c);	/* cell width of character c */

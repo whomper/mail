@@ -164,6 +164,7 @@ static void set_opt(const char *k, const char *v)
 	else if (!strcmp(k, "panes")) shorts(v, &opt.pane_w, 2);
 	else if (!strcmp(k, "editor")) shorts(v, &opt.ed_x, 4);
 	else if (!strcmp(k, "font")) shorts(v, &opt.font_id, 2);
+	else if (!strcmp(k, "hebfont")) opt.hebfont = n >= 0 && n <= 2 ? n : 0;
 }
 
 int store_init(const char *workdir)
@@ -262,6 +263,9 @@ int store_save_settings(void)
 	note(&b, "text font: GDOS font id (1 = system font), size in points");
 	note(&b, "(system font: 0 = normal, 8 = small, 16 = large); set with Options > Font");
 	sb_printf(&b, "font=%d,%d\r\n", opt.font_id, opt.font_pt);
+	note(&b, "where the screen font has its Hebrew letters: 0 = Atari (standard TOS font),");
+	note(&b, "1 = ISO-8859-8 places (Israeli Hebrew fonts), 2 = DOS 862 places; set in Options > Font");
+	sb_printf(&b, "hebfont=%d\r\n", opt.hebfont);
 	for (i = 0; i < naccts; i++) {
 		ACCOUNT *a = accts[i];
 		sb_adds(&b, "\r\n; one [account] part per account, up to 8; Options > Accounts edits them\r\n"

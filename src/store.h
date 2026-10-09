@@ -54,6 +54,11 @@ typedef struct {
 	unsigned long im_used;
 } ACCOUNT;
 
+/* where a screen font keeps the Hebrew letters */
+#define HEB_ATARI 0		/* the Atari character set, 0xC2-0xDC (TOS, EmuTOS) */
+#define HEB_ISO   1		/* ISO-8859-8 / windows-1255 places, 0xE0-0xFA */
+#define HEB_DOS   2		/* DOS code page 862, 0x80-0x9A */
+
 typedef struct {
 	short tz;		/* minutes east of UTC */
 	short check;		/* minutes between automatic checks, 0 = off */
@@ -67,6 +72,7 @@ typedef struct {
 	short pane_w, pane_h;	/* folders pane width, message list height (pixels) */
 	short ed_x, ed_y, ed_w, ed_h;		/* the editor window */
 	short font_id, font_pt;	/* text font: VDI font id (1 = system) and size */
+	short hebfont;		/* where the font has its Hebrew letters: HEB_* */
 	char workdir[200];
 } OPTIONS;
 

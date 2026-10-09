@@ -25,7 +25,10 @@ static short sbw;			/* scroll bar width */
 #define DIV 4				/* divider thickness */
 
 #define EDKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | UPARROW | DNARROW | VSLIDE)
-#define MAINKIND (NAME | CLOSER | FULLER | MOVER | INFO | SIZER)
+/* no SIZER: with no sliders of its own the AES would keep an empty
+   column down the right edge for it. The main window draws its own size
+   box below the message pane's scroll bar instead. */
+#define MAINKIND (NAME | CLOSER | FULLER | MOVER | INFO)
 
 static int intersect(GRECT *a, GRECT *b)
 {
@@ -143,6 +146,19 @@ static GRECT sb_rect(WIN *w)
 	r.y = w->work.y;
 	r.w = sbw;
 	r.h = w->work.h;
+	if (w == &w_reader)
+		r.h -= sbw;		/* the size box goes below it */
+	return r;
+}
+
+/* the main window's size box: the bottom right corner */
+static GRECT grip_rect(void)
+{
+	GRECT r;
+	r.w = sbw;
+	r.h = sbw;
+	r.x = mwork.x + mwork.w - sbw;
+	r.y = mwork.y + mwork.h - sbw;
 	return r;
 }
 
@@ -235,6 +251,17 @@ static void draw_scrollbar(WIN *w)
 	box_outline(s.x, s.y, s.w, s.h);
 }
 
+/* drawn like the AES's own: a small window over a bigger one */
+static void draw_grip(void)
+{
+	GRECT g = grip_rect();
+	short a = g.w / 2, b = g.h / 2;
+	fill(&g, 0);
+	box_outline(g.x, g.y, g.w, g.h);
+	box_outline(g.x + 3, g.y + 3, g.w - 6, g.h - 6);
+	box_outline(g.x + 3, g.y + 3, a, b);
+}
+
 static void draw_header(WIN *w)
 {
 	GRECT h;
@@ -295,6 +322,9 @@ static void draw_main(GRECT *clip)
 		if (intersect(clip, &r))
 			draw_scrollbar(w);
 	}
+	r = grip_rect();
+	if (intersect(clip, &r))
+		draw_grip();
 	r = div_v();
 	if (intersect(clip, &r))
 		draw_divider(&r);
@@ -417,6 +447,7 @@ static void visual(char *dst, const char *src, int size)
 	} else {
 		str_copy(dst, src, size);
 	}
+	heb_font_map(dst, (long)strlen(dst), opt.hebfont);
 }
 
 static void redraw_header(WIN *w)
@@ -771,7 +802,10 @@ void win_hover(short mx, short my)
 	short h = wind_find(mx, my), t, d, want = ARROW;
 	wind_get(0, WF_TOP, &t, &d, &d, &d);
 	if (h == main_h && t == main_h) {
-		if (on_divider(mx, my, 1))
+		GRECT g = grip_rect();
+		if (inside(&g, mx, my))
+			want = FLAT_HAND;
+		else if (on_divider(mx, my, 1))
 			want = 7;	/* LR arrows */
 		else if (on_divider(mx, my, 0))
 			want = 6;	/* UD arrows */
@@ -784,12 +818,43 @@ void win_hover(short mx, short my)
 	evnt_set_m1(1, mx, my, 1, 1);
 }
 
+/* drag the size box: a rubber box from the window's top left corner */
+static void main_resize(void)
+{
+	GRECT c;
+	short w, h;
+	wind_get(main_h, WF_CURRXYWH, &c.x, &c.y, &c.w, &c.h);
+	wind_update(BEG_UPDATE);
+	wind_update(3);
+	graf_mouse(FLAT_HAND, 0);
+	graf_rubberbox(c.x, c.y, 40 * cw, 12 * ch, &w, &h);
+	graf_mouse(ARROW, 0);
+	wind_update(2);
+	wind_update(END_UPDATE);
+	if (w == c.w && h == c.h)
+		return;
+	if (c.x + w > scr_w)
+		w = scr_w - c.x;
+	if (c.y + h > scr_h)
+		h = scr_h - c.y;
+	wind_set(main_h, WF_CURRXYWH, c.x, c.y, w, h);
+	get_main_work();
+	save_main_place();
+	layout();
+	main_redraw(0);
+}
+
 /* a mouse press anywhere; returns 1 if it was ours */
 int win_mouse(short mx, short my, short button, short clicks, short kstate)
 {
 	short h = wind_find(mx, my), i;
 	GRECT r;
 	if (h > 0 && h == main_h) {
+		r = grip_rect();
+		if (inside(&r, mx, my)) {
+			main_resize();
+			return 1;
+		}
 		if (on_divider(mx, my, 1)) {
 			divider_drag(1);
 			return 1;

@@ -70,7 +70,8 @@ like a modern mail program:
   as text. Quoted lines are drawn light.
 
 **Drag the dividers** between the panes to size them; the pointer turns
-into arrows over a divider. Each pane has its own scroll bar. The pane
+into arrows over a divider. Drag the box in the bottom right corner to
+size the window. Each pane has its own scroll bar. The pane
 with the dark header has the keyboard: click a pane, or press Tab to
 move on. The main window's own place and size, the dividers, the
 editor's place and the font are all kept in `MAIL.INF` for next time.
@@ -100,11 +101,22 @@ Esc closes the menu.
 
 **New message** opens the editor in a window of its own.
 
-**Options > Font** picks the font for the text in the panes and the
-editor: the system font at its normal, small (8×8) or large (8×16)
-size, and, with a GDOS such as NVDI or SpeedoGDOS, every monospaced
-font it has. Menus and dialogs keep the system font. Hebrew needs a font
-with the Atari's Hebrew letters, which the system font has.
+**Options > Font** opens a font selector like other GEM programs': the
+font families on the left, the sizes of the chosen one beside them,
+what kind of font it is (bitmap, Speedo, TrueType, Type 1) and a sample
+below. The system font comes in two sizes (8×8 and 8×16); with a GDOS
+such as NVDI or SpeedoGDOS its fonts are listed too. MAIL lays text out
+in character cells, so it needs a monospaced font: proportional ones
+are shown light and can't be chosen. Menus and dialogs keep the system
+font.
+
+**Hebrew letters.** Fonts keep the Hebrew letters in different places:
+the standard Atari font (TOS, EmuTOS) at the Atari character set's,
+Israeli system fonts and many GDOS fonts where ISO-8859-8 or DOS 862 put
+them. If Hebrew shows as other symbols, open Options > Font: the three
+buttons under "Hebrew letters" each show the word shalom as that kind of
+font would; pick the one that reads correctly, and the sample below
+shows the result.
 
 **About MAIL** (first menu) shows the version and how MAIL is connected.
 

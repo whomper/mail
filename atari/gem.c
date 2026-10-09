@@ -58,6 +58,20 @@ short graf_mkstate(short *mx, short *my, short *mb, short *ks)
 	return r;
 }
 
+/* drag a rubber box from x,y; its size when the button is released */
+short graf_rubberbox(short x, short y, short minw, short minh, short *w, short *h)
+{
+	short r;
+	aintin[0] = x;
+	aintin[1] = y;
+	aintin[2] = minw;
+	aintin[3] = minh;
+	r = aes(70, 4, 3, 0, 0);
+	*w = aintout[1];
+	*h = aintout[2];
+	return r;
+}
+
 /* rectangle for MU_M1: leave=0 waits for entering it, 1 for leaving */
 static short m1[5];
 
@@ -560,6 +574,19 @@ short vqt_name(short h, short index, char *name)
 		name[i] = (char)vintout[1 + i];
 	name[32] = 0;
 	return vintout[0];
+}
+
+/* NVDI and SpeedoGDOS also say what kind of font it is (intout[34]):
+ * 1 bitmap, 2 Speedo, 4 TrueType, 8 Type 1; 0 when the VDI doesn't */
+short vqt_font_format(short h, short index)
+{
+	vintin[0] = index;
+	vintin[1] = 0;
+	contrl[4] = 0;
+	vdi(130, 0, 2, h);
+	if (contrl[4] < 35)
+		return 0;
+	return vintout[34] & 0xff;
 }
 
 short vst_font(short h, short id)

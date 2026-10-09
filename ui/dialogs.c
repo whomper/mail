@@ -22,7 +22,12 @@ static short nobj, nted, last_child;
 
 /* ---------------- builder ---------------- */
 
-static void d_begin(short w, short h)
+OBJECT *d_tree(void)
+{
+	return tree;
+}
+
+void d_begin(short w, short h)
 {
 	static short eyes_made;
 	if (!eyes_made) {
@@ -43,7 +48,7 @@ static void d_begin(short w, short h)
 	tree[0].ob_height = h;
 }
 
-static short d_add(short type, short flags, short state, long spec, short x, short y, short w, short h)
+short d_add(short type, short flags, short state, long spec, short x, short y, short w, short h)
 {
 	short i = nobj++;
 	OBJECT *o = &tree[i];
@@ -66,7 +71,7 @@ static short d_add(short type, short flags, short state, long spec, short x, sho
 	return i;
 }
 
-static short d_text(short x, short y, const char *s)
+short d_text(short x, short y, const char *s)
 {
 	return d_add(G_STRING, 0, 0, (long)s, x, y, (short)strlen(s), 1);
 }
@@ -97,17 +102,17 @@ static short d_edit(short x, short y, char *buf, short len, char kind)
 	return d_add(G_FTEXT, EDITABLE, 0, (long)t, x, y, len, 1);
 }
 
-static short d_button(short x, short y, short w, const char *s, short flags)
+short d_button(short x, short y, short w, const char *s, short flags)
 {
 	return d_add(G_BUTTON, SELECTABLE | flags, 0, (long)s, x, y, w, 1);
 }
 
-static short d_check(short x, short y, const char *s, short on)
+short d_check(short x, short y, const char *s, short on)
 {
 	return d_add(G_BUTTON, SELECTABLE, on ? SELECTED : 0, (long)s, x, y, (short)strlen(s) + 2, 1);
 }
 
-static void d_end(void)
+void d_end(void)
 {
 	short i;
 	tree[last_child].ob_next = 0;
@@ -594,6 +599,7 @@ static short pick(const char *title, const char **items, short n)
 			else
 				memcpy(shown[k], items[i], len);
 			shown[k][len] = 0;
+			heb_font_map(shown[k], len, opt.hebfont);
 			obj[k] = d_add(G_BUTTON, SELECTABLE | EXIT, 0, (long)shown[k], 3, 3 + k, 34, 1);
 		}
 		if (first > 0)
