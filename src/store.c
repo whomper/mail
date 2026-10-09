@@ -286,7 +286,7 @@ int store_save_settings(void)
 		sb_printf(&b, "email=%s\r\n", a->email);
 		note(&b, "incoming mail: imap (folders stay on the server) or pop3 (mail comes to the Atari)");
 		sb_printf(&b, "in=%s\r\n", a->pop ? "pop3" : "imap");
-		note(&b, "incoming server and port; through the Pi gateway: its IP, 1143 (IMAP) or 1110 (POP3)");
+		note(&b, "incoming server and port; through the Pi gateway: its IP, 143 (IMAP) or 110 (POP3)");
 		sb_printf(&b, "host=%s\r\nport=%u\r\n", a->host, a->port);
 		note(&b, "login for the incoming server");
 		sb_adds(&b, "user=");
@@ -298,7 +298,7 @@ int store_save_settings(void)
 		sb_adds(&b, "\r\n");
 		note(&b, "POP3 only: 1 = leave mail on the server after downloading it");
 		sb_printf(&b, "leave=%d\r\n", a->leave);
-		note(&b, "outgoing (SMTP) server and port; through the Pi gateway: its IP and 1025");
+		note(&b, "outgoing (SMTP) server and port; through the Pi gateway: its IP and 587");
 		sb_printf(&b, "smtphost=%s\r\nsmtpport=%u\r\n", a->smtphost, a->smtpport);
 		note(&b, "SMTP login: empty = same as incoming, - = the server needs no login");
 		sb_adds(&b, "smtpuser=");

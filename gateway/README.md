@@ -52,10 +52,10 @@ Options > Accounts, with the Pi's address (the script prints it):
 |-----------------------|--------------------------------|
 | Incoming mail         | IMAP (or POP3)                 |
 | Server                | the Pi, e.g. 192.168.1.10      |
-| Port                  | 1143 (POP3: 1110)              |
+| Port                  | 143 (POP3: 110)                |
 | User, Password        | your mail login / app password |
 | Outgoing server       | the Pi again                   |
-| Outgoing port         | 1025                           |
+| Outgoing port         | 587                            |
 | Outgoing user         | empty (the same login)         |
 
 Use the Pi's IP address: plain TOS with STinG can't always resolve names
@@ -71,11 +71,12 @@ glyph`): MAIL recognises its `x-atari-st` text and puts the Hebrew back
 into reading order. That proxy rewrites messages for Troll, though: it
 drops HTML, wraps Hebrew at 60 columns and, for IMAP only, changes what a
 forwarded message carries, so for MAIL this plain tunnel is the better
-choice. The two run side by side (the proxy on 143, this gateway on 1143
-and 1025); if another bridge already has these ports, pick others:
+choice. The two run side by side: this gateway on the standard ports
+(143, 587, 110), the Troll proxy on others (e.g. 1143). To give this
+gateway other ports instead:
 
 ```
-sudo ./install.sh --ports 2143,2025,2110 imap.mail.me.com smtp.mail.me.com
+sudo ./install.sh --ports 1143,1025,1110 imap.mail.me.com smtp.mail.me.com:587
 ```
 
 ## Keeping it private

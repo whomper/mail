@@ -11,21 +11,21 @@
 # --allow ATARI_IP  only that address may use the gateway (needs ufw).
 # --ports I,S,P     the ports on the Pi for IMAP, SMTP and POP3, when the
 #                   usual ones are taken (e.g. by another bridge):
-#   sudo ./install.sh --ports 2143,2025,2110 imap.gmail.com smtp.gmail.com
+#   sudo ./install.sh --ports 1143,1025,1110 imap.gmail.com smtp.gmail.com
 #
 # Ports on the Pi, to type into MAIL's account dialog (unless --ports):
-#   IMAP 1143   POP3 1110   SMTP 1025
+#   IMAP 143   POP3 110   SMTP 587   (the standard ones)
 set -euo pipefail
 
 USAGE="usage: install.sh [--allow ATARI_IP] [--ports IMAP,SMTP,POP3] IMAP_SERVER SMTP_SERVER [POP3_SERVER]"
 ALLOW=""
-P_IMAP=1143 P_SMTP=1025 P_POP3=1110
+P_IMAP=143 P_SMTP=587 P_POP3=110
 while [ "${1:-}" = "--allow" ] || [ "${1:-}" = "--ports" ]; do
   if [ "$1" = "--allow" ]; then
     ALLOW=${2:?$USAGE}
   else
     IFS=, read -r P_IMAP P_SMTP P_POP3 <<<"${2:?$USAGE}"
-    P_POP3=${P_POP3:-1110}
+    P_POP3=${P_POP3:-110}
   fi
   shift 2
 done

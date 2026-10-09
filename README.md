@@ -48,8 +48,8 @@ right-to-left layout and keyboard, and the Hatari test tools.
 1. Copy `MAIL.PRG` into a folder of its own on your Atari, e.g. `C:\MAIL\`.
 2. Set up the gateway on a Raspberry Pi: `sudo gateway/install.sh
    imap.gmail.com smtp.gmail.com` (see [gateway/README.md](gateway/README.md)).
-3. Start MAIL and fill in your account: the Pi's IP address, ports 1143
-   (IMAP) and 1025 (SMTP), your login.
+3. Start MAIL and fill in your account: the Pi's IP address, ports 143
+   (IMAP) and 587 (SMTP), your login.
 
 The [user guide](docs/GUIDE.md) describes everything else.
 

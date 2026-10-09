@@ -43,10 +43,10 @@ Options > Accounts > New, or the dialog MAIL shows at first start:
 | Your name      | shown to people you write to (Hebrew is fine)                    |
 | E-mail         | your address                                                     |
 | Incoming mail  | IMAP (folders stay on the server) or POP3 (mail comes to the Atari) |
-| Server, Port   | through the gateway: the Pi's IP, 1143 (IMAP) or 1110 (POP3); a server without TLS directly: its name and 143 or 110 |
+| Server, Port   | through the gateway: the Pi's IP and 143 (IMAP) or 110 (POP3), as for a server without TLS |
 | User, Password | your login (for Gmail: an app password)                          |
 | POP3: leave mail on the server | keep a copy on the server after downloading    |
-| Outgoing       | the Pi's IP and 1025 through the gateway; leave User empty to use the incoming login, or type `-` for a server that needs none |
+| Outgoing       | the Pi's IP and 587 through the gateway; leave User empty to use the incoming login, or type `-` for a server that needs none |
 | Passwords      | shown as `*`; click the eye beside the field to see what you typed |
 | Signature      | added below new messages; `|` starts a new line                  |
 
