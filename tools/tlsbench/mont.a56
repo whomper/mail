@@ -1,0 +1,135 @@
+; Montgomery multiplication on the Falcon's DSP56001 (CIOS, 23-bit digits).
+; The host sends n, mp (= -m^-1 mod 2^23), K, then a[n], b[n], m[n];
+; the DSP computes t = a*b/R mod m (R = 2^(23n), result < 2m) K times and
+; sends t[0..n]. Digits are 23 bits so the signed 24x24 multiplier and
+; the 48-bit accumulator never overflow: after MAC the accumulator holds
+; 2*sum, so its low word is the digit doubled and its middle word the carry.
+HSR	equ	$ffe9
+HRX	equ	$ffeb
+NV	equ	$0		; x:0 n
+MPV	equ	$1		; x:1 mp
+KV	equ	$2		; x:2 K
+XA	equ	$40		; x: a[]
+XM	equ	$a0		; x: m[]
+YT	equ	$40		; y: t[] (n+2), y:$3f is scratch
+YB	equ	$a0		; y: b[]
+
+	org	p:$0
+	jmp	start
+
+	org	p:$40
+start
+	movep	#1,x:$ffe0		; port B is the host port
+	movep	#0,x:$fffe		; no wait states
+	move	#>1,y1			; the constant 1 (an integer)
+cmd
+	jsr	rd
+	move	x0,x:NV
+	jsr	rd
+	move	x0,x:MPV
+	jsr	rd
+	move	x0,x:KV
+	move	#XA,r0
+	nop
+	do	x:NV,ra
+	jsr	rd
+	move	x0,x:(r0)+
+ra
+	move	#YB,r0
+	nop
+	do	x:NV,rb
+	jsr	rd
+	move	x0,y:(r0)+
+rb
+	move	#XM,r0
+	nop
+	do	x:NV,rm
+	jsr	rd
+	move	x0,x:(r0)+
+rm
+	do	x:KV,kl
+	jsr	mm
+	nop
+kl
+	move	#YT,r4
+	move	x:NV,a
+	move	#>1,x0
+	add	x0,a
+	move	a1,x:KV
+	do	x:KV,sl
+	move	y:(r4)+,x1
+	jsr	wr
+	nop
+sl
+	jmp	cmd
+
+rd	jclr	#0,x:HSR,rd
+	movep	x:HRX,x0
+	rts
+wr	jclr	#1,x:HSR,wr
+	movep	x1,x:HRX
+	rts
+
+mm
+	clr	a	#YT,r4
+	nop
+	do	x:NV,c1
+	move	a,y:(r4)+
+c1
+	move	a,y:(r4)+
+	move	a,y:(r4)+
+	move	#YB,r6
+	nop
+	do	x:NV,outer
+	move	y:(r6)+,x0		; b[i]
+	move	#XA,r0
+	move	#YT,r4
+	move	#YT,r5
+	clr	b
+	move	b1,x1			; carry 0
+	do	x:NV,in1
+	mpy	y1,x1,a	y:(r4)+,y0	; 2C
+	mac	y0,y1,a	x:(r0)+,y0	; + 2t[j]
+	mac	y0,x0,a			; + 2a[j]b[i]
+	move	a0,b1
+	lsr	b	a1,x1		; digit, carry
+	move	b1,y:(r5)+
+in1
+	mpy	y1,x1,a	y:(r4)+,y0	; t[n] + C
+	mac	y0,y1,a
+	move	a0,b1
+	lsr	b	a1,x1
+	move	b1,y:(r5)+		; t[n]
+	move	x1,y:(r5)		; t[n+1]
+	move	#YT,r4
+	move	x:MPV,x0
+	move	y:(r4),y0
+	mpy	y0,x0,a			; t[0]*mp
+	move	a0,b1
+	lsr	b
+	move	b1,x0			; m_i
+	clr	b
+	move	b1,x1
+	move	#XM,r0
+	move	#YT-1,r5
+	do	x:NV,in2
+	mpy	y1,x1,a	y:(r4)+,y0
+	mac	y0,y1,a	x:(r0)+,y0
+	mac	y0,x0,a
+	move	a0,b1
+	lsr	b	a1,x1
+	move	b1,y:(r5)+
+in2
+	mpy	y1,x1,a	y:(r4)+,y0	; t[n] + C -> t[n-1]
+	mac	y0,y1,a
+	move	a0,b1
+	lsr	b	a1,x1
+	move	b1,y:(r5)+
+	mpy	y1,x1,a	y:(r4),y0	; t[n+1] + C -> t[n]
+	mac	y0,y1,a
+	move	a0,b1
+	lsr	b
+	move	b1,y:(r5)
+	nop
+outer
+	rts
