@@ -45,6 +45,17 @@ static void t_charset(void)
 	free(s);
 
 	/* Latin-1 accents map to the ST font; curly quotes become ASCII */
+	/* already Atari text, as a Troll-era bridge sends it, still labelled UTF-8 */
+	s = cs_to_atari("\xD6\xCD\xC7\xDA caf\x82", 9, CS_UTF8, &n);
+	CHECK(n == 9 && !memcmp(s, "\xD6\xCD\xC7\xDA caf\x82", 9), "atari text labelled utf-8");
+	free(s);
+	s = cs_to_atari("\xD6\xCD\xC7\xDA", 4, CS_LATIN1, &n);
+	CHECK(n == 4 && !memcmp(s, shalom_atari, 4), "atari text labelled latin-1");
+	free(s);
+	/* real Latin-1 capitals stay Latin-1 */
+	s = cs_to_atari("\xC7" "a a \xE9t\xE9 \xC9\xC9", 11, CS_LATIN1, &n);
+	CHECK(n == 11 && (unsigned char)s[0] == 0x80 && (unsigned char)s[10] == 0x90, "latin-1 kept");
+	free(s);
 	s = cs_to_atari("caf\xC3\xA9 \xE2\x80\x9Cok\xE2\x80\x9D", 14, CS_UTF8, &n);
 	CHECK(!strcmp(s, "caf\x82 \"ok\""), "accents/quotes: %s", s);
 	free(s);

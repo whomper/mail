@@ -61,6 +61,20 @@ Options > Accounts, with the Pi's address (the script prints it):
 Use the Pi's IP address: plain TOS with STinG can't always resolve names
 on the local network.
 
+## Next to another bridge
+
+MAIL converts mail to the Atari character set itself, Hebrew included, so
+it only needs a plain TLS tunnel. A bridge made for older programs such
+as Troll, which converts the text on the Pi, also works: MAIL notices
+Hebrew that is already in Atari characters. If that bridge already uses
+the usual ports, give MAIL's gateway others:
+
+```
+sudo ./install.sh --ports 2143,2025,2110 imap.gmail.com smtp.gmail.com
+```
+
+and type those ports into MAIL's account dialog.
+
 ## Keeping it private
 
 Between the Atari and the Pi the connection is not encrypted, as on

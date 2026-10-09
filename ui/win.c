@@ -681,6 +681,9 @@ void win_ensure_visible(WIN *w, long line)
 		win_scroll_to(w, line - rows + 1);
 }
 
+/* the pointer shape win_hover() last set; drags set it back to ARROW */
+static short hover_shape = ARROW;
+
 static short button_down(short *mx, short *my)
 {
 	short mb, ks;
@@ -767,6 +770,7 @@ static void divider_drag(int vertical)
 	}
 	vswr_mode(vdi_h, 1);
 	graf_mouse(ARROW, 0);
+	hover_shape = ARROW;
 	wind_update(2);
 	wind_update(END_UPDATE);
 	if (last < 0)
@@ -798,7 +802,6 @@ static int on_divider(short mx, short my, int vertical)
 /* the pointer shows the sizing arrows over a divider */
 void win_hover(short mx, short my)
 {
-	static short shape = ARROW;
 	short h = wind_find(mx, my), t, d, want = ARROW;
 	wind_get(0, WF_TOP, &t, &d, &d, &d);
 	if (h == main_h && t == main_h) {
@@ -810,34 +813,77 @@ void win_hover(short mx, short my)
 		else if (on_divider(mx, my, 0))
 			want = 6;	/* UD arrows */
 	}
-	if (want != shape) {
+	if (want != hover_shape) {
 		graf_mouse(want, 0);
-		shape = want;
+		hover_shape = want;
 	}
 	/* the next move wakes us again */
 	evnt_set_m1(1, mx, my, 1, 1);
 }
 
-/* drag the size box: a rubber box from the window's top left corner */
+/* drag the size box. MAIL draws the outline itself, the way the
+   dividers are dragged: graf_rubberbox() hung TOS 4's AES here. */
+static void xor_box(GRECT *r)
+{
+	short p[10];
+	p[0] = p[6] = p[8] = r->x;
+	p[1] = p[3] = p[9] = r->y;
+	p[2] = p[4] = r->x + r->w - 1;
+	p[5] = p[7] = r->y + r->h - 1;
+	graf_mouse(M_OFF, 0);
+	v_pline(vdi_h, 5, p);
+	graf_mouse(M_ON, 0);
+}
+
 static void main_resize(void)
 {
-	GRECT c;
-	short w, h;
+	GRECT c, b, scr;
+	short mx, my, ox, oy, held, shown = 0, minw = 40 * cw, minh = 12 * ch;
 	wind_get(main_h, WF_CURRXYWH, &c.x, &c.y, &c.w, &c.h);
+	button_down(&mx, &my);
+	ox = c.x + c.w - mx;		/* where in the box it was grabbed */
+	oy = c.y + c.h - my;
+	b = c;
+	scr.x = 0;
+	scr.y = 0;
+	scr.w = scr_w;
+	scr.h = scr_h;
 	wind_update(BEG_UPDATE);
 	wind_update(3);
-	graf_mouse(FLAT_HAND, 0);
-	graf_rubberbox(c.x, c.y, 40 * cw, 12 * ch, &w, &h);
+	clip_on(&scr);
+	vswr_mode(vdi_h, 3);		/* XOR */
+	vsl_color(vdi_h, 1);
+	do {
+		GRECT n = c;
+		held = button_down(&mx, &my);
+		n.w = mx + ox - c.x;
+		n.h = my + oy - c.y;
+		if (n.w < minw)
+			n.w = minw;
+		if (n.h < minh)
+			n.h = minh;
+		if (c.x + n.w > scr_w)
+			n.w = scr_w - c.x;
+		if (c.y + n.h > scr_h)
+			n.h = scr_h - c.y;
+		if (!shown || n.w != b.w || n.h != b.h) {
+			if (shown)
+				xor_box(&b);
+			b = n;
+			xor_box(&b);
+			shown = 1;
+		}
+		evnt_timer_(10);
+	} while (held);
+	xor_box(&b);
+	vswr_mode(vdi_h, 1);
 	graf_mouse(ARROW, 0);
+	hover_shape = ARROW;
 	wind_update(2);
 	wind_update(END_UPDATE);
-	if (w == c.w && h == c.h)
+	if (b.w == c.w && b.h == c.h)
 		return;
-	if (c.x + w > scr_w)
-		w = scr_w - c.x;
-	if (c.y + h > scr_h)
-		h = scr_h - c.y;
-	wind_set(main_h, WF_CURRXYWH, c.x, c.y, w, h);
+	wind_set(main_h, WF_CURRXYWH, c.x, c.y, b.w, b.h);
 	get_main_work();
 	save_main_place();
 	layout();

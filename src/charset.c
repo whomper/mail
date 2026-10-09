@@ -187,6 +187,50 @@ static unsigned long next_char(const u8 *s, long n, long *i, int cs)
 	}
 }
 
+/* Text that is already in the Atari character set although it says
+ * otherwise: a mail bridge made for older Atari programs (Troll) turns
+ * mail into Atari text on the way, Hebrew at 0xC2-0xDC, and leaves the
+ * charset as it was. Such text isn't valid UTF-8, and its 8-bit bytes
+ * are nearly all Atari Hebrew letters standing next to each other, which
+ * real Latin-1, ISO-8859-8 or windows-1255 text never is. */
+static int valid_utf8(const u8 *s, long n)
+{
+	long i = 0;
+	while (i < n) {
+		u8 c = s[i++];
+		short need = c < 0x80 ? 0 : (c & 0xE0) == 0xC0 ? 1 : (c & 0xF0) == 0xE0 ? 2 :
+			     (c & 0xF8) == 0xF0 ? 3 : -1;
+		if (need < 0 || i + need > n)
+			return 0;
+		for (; need > 0; need--)
+			if ((s[i++] & 0xC0) != 0x80)
+				return 0;
+	}
+	return 1;
+}
+
+static int looks_atari_hebrew(const u8 *s, long n, int cs)
+{
+	long i, high = 0, heb = 0, pairs = 0;
+	for (i = 0; i < n; i++) {
+		if (s[i] < 0x80)
+			continue;
+		high++;
+		if (s[i] >= 0xC2 && s[i] <= 0xDC) {
+			heb++;
+			if (i + 1 < n && s[i + 1] >= 0xC2 && s[i + 1] <= 0xDC)
+				pairs++;
+		}
+	}
+	if (!pairs)
+		return 0;
+	/* said to be UTF-8 but isn't: half Hebrew letters is enough */
+	if (cs == CS_UTF8)
+		return heb * 2 >= high && !valid_utf8(s, n);
+	/* the single-byte charsets, whose Hebrew would be at 0xE0-0xFA */
+	return heb * 10 >= high * 9;
+}
+
 char *cs_to_atari(const char *src, long n, int cs, long *outlen)
 {
 	const u8 *s = (const u8 *)src;
@@ -194,6 +238,8 @@ char *cs_to_atari(const char *src, long n, int cs, long *outlen)
 	long i = 0;
 	if (!out)
 		return 0;
+	if (cs != CS_ATARI && looks_atari_hebrew(s, n, cs))
+		cs = CS_ATARI;
 	if (cs == CS_ATARI) {
 		memcpy(out, src, n);
 		p = out + n;
