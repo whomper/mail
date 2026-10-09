@@ -43,7 +43,7 @@ OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/sting_s.o $(OBJDIR)/nf.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(CORE) $(ATARI) $(UI)))
 HDRS    := $(wildcard src/*.h atari/*.h atari/include/*.h ui/*.h dsp/*.h)
 
-all: MAIL.PRG
+all: MAIL.PRG ROOTS.DAT
 
 MAIL.PRG: $(OBJDIR)/mail.elf tools/elf2tos.py
 	PRGFLAGS=7 python3 tools/elf2tos.py $< $@
@@ -96,6 +96,13 @@ $(OBJDIR)/mail-cli: tests/host/mail_cli.c $(HOSTSRC) $(HDRS) $(HOSTLIB) | $(OBJD
 $(OBJDIR)/unit: tests/unit.c $(HOSTSRC) $(HDRS) $(HOSTLIB) | $(OBJDIR)
 	$(HOSTCC) $(HOSTCFLAGS) -I$(BSSL)/inc -o $@ tests/unit.c $(HOSTSRC) $(HOSTLIB)
 
+# the root certificates, decoded ahead of time for Falcon mode
+$(OBJDIR)/mkroots: tools/mkroots.c $(HOSTSRC) $(HDRS) $(HOSTLIB) | $(OBJDIR)
+	$(HOSTCC) $(HOSTCFLAGS) -I$(BSSL)/inc -o $@ tools/mkroots.c $(HOSTSRC) $(HOSTLIB)
+
+ROOTS.DAT: CACERT.PEM $(OBJDIR)/mkroots
+	$(OBJDIR)/mkroots CACERT.PEM $@
+
 test: $(OBJDIR)/unit
 	$(OBJDIR)/unit
 
@@ -103,6 +110,6 @@ itest: $(OBJDIR)/mail-cli
 	tests/integration.sh
 
 clean:
-	rm -rf $(OBJDIR) MAIL.PRG
+	rm -rf $(OBJDIR) MAIL.PRG ROOTS.DAT
 
 .PHONY: all test itest clean

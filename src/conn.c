@@ -42,9 +42,15 @@ static int start_tls(CONN *c, const char *host, char *err, int errlen)
 	int retry = 0;
 	char msg[200];
 	conn_tls_retry = 0;
-	if (!tls_load_anchors(conn_cacert, err, errlen)) {
-		conn_log(c->name, " !! ", err, strlen(err));
-		return 0;
+	if (!tls_anchor_count()) {
+		unsigned long t0 = pf_ms();
+		int n = tls_load_anchors(conn_cacert, err, errlen);
+		if (!n) {
+			conn_log(c->name, " !! ", err, strlen(err));
+			return 0;
+		}
+		snprintf(msg, sizeof(msg), "%d root certificates read in %lu ms", n, pf_ms() - t0);
+		conn_log("TLS", " -- ", msg, strlen(msg));
 	}
 	t = tls_start(c->h, host, !wants_ecdsa(host), &retry, err, errlen);
 	if (!t) {

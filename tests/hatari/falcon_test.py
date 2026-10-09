@@ -49,9 +49,17 @@ uid, gid = subprocess.check_output(["id", "-u", "nobody"]).strip(), subprocess.c
 # the test certificate: the only root MAIL trusts; valid for the address
 # MAIL uses (the emulator's network bridge has no name lookup)
 cert, key = os.path.join(srv, "cert.pem"), os.path.join(srv, "key.pem")
-subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2",
-                "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost,DNS:127.0.0.1",
-                "-keyout", key, "-out", cert], check=True, capture_output=True)
+# REUSE=1: the certificate and MAIL's ROOTS.DAT from the last run, to
+# test a start with the roots cached
+keep = os.path.join(work, "keep")
+reuse = os.environ.get("REUSE") == "1" and os.path.exists(os.path.join(keep, "ROOTS.DAT"))
+if reuse:
+    shutil.copy(os.path.join(keep, "cert.pem"), cert)
+    shutil.copy(os.path.join(keep, "key.pem"), key)
+else:
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2",
+                    "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost,DNS:127.0.0.1",
+                    "-keyout", key, "-out", cert], check=True, capture_output=True)
 os.chmod(key, 0o644)
 conf = open(os.path.join(ROOT, "tests", "dovecot.conf.in")).read()
 conf = conf.replace("ssl = no", "ssl = yes\nssl_cert = <%s\nssl_key = <%s" % (cert, key))
@@ -70,8 +78,17 @@ smtp = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests", "smtp_serve
 # drive C:
 os.makedirs(os.path.join(hd, "AUTO"))
 shutil.copy(os.path.join(ROOT, "MAIL.PRG"), hd)
-shutil.copy(cert, os.path.join(hd, "CACERT.PEM"))
+# the full Mozilla list MAIL ships, plus the test certificate
+with open(os.path.join(hd, "CACERT.PEM"), "wb") as f:
+    f.write(open(os.path.join(ROOT, "CACERT.PEM"), "rb").read() + open(cert, "rb").read())
 shutil.copy(os.path.join(ROOT, "tools", "fakesting", "FAKESTNG.PRG"), os.path.join(hd, "AUTO"))
+if reuse:
+    shutil.copy(os.path.join(keep, "ROOTS.DAT"), hd)
+elif os.environ.get("NOCACHE") != "1":
+    # decoded on this computer by tools/mkroots, as MAIL ships it
+    # (NOCACHE=1: let MAIL decode CACERT.PEM itself, over a minute)
+    subprocess.run([os.path.join(ROOT, "build", "mkroots"), os.path.join(hd, "CACERT.PEM"),
+                    os.path.join(hd, "ROOTS.DAT")], check=True)
 with open(os.path.join(hd, "MAIL.INF"), "w", newline="") as f:
     # tz=0: the emulator's clock is this computer's, which runs on UTC
     f.write("[options]\r\ntz=0\r\nlog=1\r\nfalcon=1\r\n[account]\r\nname=Dana\r\nfullname=Dana Falcon\r\n"
@@ -89,10 +106,26 @@ bridge = subprocess.Popen([sys.executable, os.path.join(HERE, "serial_bridge.py"
                           stderr=open(os.path.join(work, "bridge.log"), "w"))
 shots = os.path.join(work, "shots")
 shutil.rmtree(shots, ignore_errors=True)
-r = rig.Rig(work, tos, serial=(fifo_out, fifo_in), extra=extra)
+# 4 MB: Falcon mode needs room for TLS (Falcons came with 1, 4 or 14 MB)
+r = rig.Rig(work, tos, serial=(fifo_out, fifo_in), extra=("--memsize", "4") + extra)
+
+
+def wait_log(pattern, timeout):
+    """wait until MAIL.LOG has a line containing pattern"""
+    t0 = time.time()
+    path = os.path.join(hd, "MAIL.LOG")
+    while time.time() - t0 < timeout:
+        if os.path.exists(path) and pattern in open(path, "rb").read().decode("latin-1"):
+            return True
+        time.sleep(2)
+    print("timed out waiting for", pattern)
+    return False
+
+
 ok = False
 try:
-    time.sleep(100)                      # boot, TLS handshake, log in, mirror
+    wait_log("IMAP -- secure", 400)      # boot, the root certificates, TLS
+    time.sleep(40)                       # log in, mirror the inbox
     r.shot("n1-inbox")
     r.click(330, 108)                    # newest message: the Hebrew one
     time.sleep(30)                       # downloaded over the serial line
@@ -108,7 +141,8 @@ try:
     time.sleep(0.5)
     r.shot("n3-reply")
     r.ctrl("s")                          # send now
-    time.sleep(120)                      # another handshake, for SMTP
+    wait_log("SMTP -- closed", 300)      # another handshake, for SMTP
+    time.sleep(20)                       # the copy in Sent
     r.shot("n4-sent")
 
     # did it arrive?
@@ -142,5 +176,10 @@ finally:
     smtp.terminate()
     subprocess.run(["doveadm", "-c", os.path.join(srv, "dovecot.conf"), "stop"])
     shutil.rmtree(run_dir, ignore_errors=True)
+    roots = os.path.join(hd, "ROOTS.DAT")
+    if os.path.exists(roots):
+        os.makedirs(keep, exist_ok=True)
+        for f in (cert, key, roots):
+            shutil.copy(f, keep)
 print("PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)

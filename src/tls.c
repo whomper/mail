@@ -28,6 +28,8 @@ uint32_t br_rsa_pkcs1_sig_unpad(const unsigned char *sig, size_t sig_len,
 
 int tls_tz_minutes;
 char tls_seed_path[200];
+char tls_roots_cache[200];
+void (*tls_note)(const char *msg);
 int (*tls_rsa_accel)(unsigned char *x, size_t xlen, const unsigned char *n, size_t nlen,
 		     const unsigned char *e, size_t elen);
 
@@ -47,6 +49,24 @@ static size_t nanchors, maxanchors;
 int tls_anchor_count(void)
 {
 	return (int)nanchors;
+}
+
+void tls_free_anchors(void)
+{
+	size_t i;
+	for (i = 0; i < nanchors; i++) {
+		br_x509_trust_anchor *ta = &anchors[i];
+		free(ta->dn.data);
+		if (ta->pkey.key_type == BR_KEYTYPE_RSA) {
+			free(ta->pkey.key.rsa.n);
+			free(ta->pkey.key.rsa.e);
+		} else {
+			free(ta->pkey.key.ec.q);
+		}
+	}
+	free(anchors);
+	anchors = 0;
+	nanchors = maxanchors = 0;
 }
 
 typedef struct {
@@ -141,46 +161,252 @@ static void add_anchor(const unsigned char *der, size_t len)
 	nanchors++;
 }
 
+/* ---- the decoded list, cached: decoding 120 certificates takes a
+ * 68030 a minute, reading them back a moment. The cache remembers the
+ * PEM file's size and checksum and is made again when they change. */
+#define CACHE_MAGIC "MAILROOTS1"
+
+static unsigned long file_sum(const char *path, long *size)
+{
+	char chunk[4096];
+	unsigned long h = 2166136261UL;		/* FNV-1a */
+	long got;
+	int f = pf_open(path, PF_READ);
+	*size = -1;
+	if (f < 0)
+		return 0;
+	*size = 0;
+	while ((got = pf_read(f, chunk, sizeof(chunk))) > 0) {
+		long i;
+		for (i = 0; i < got; i++) {
+			/* times the FNV prime 2^24 + 403 in shifts: the 68000 has
+			   no 32-bit multiply */
+			h ^= (unsigned char)chunk[i];
+			h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+		}
+		*size += got;
+	}
+	pf_close(f);
+	return h & 0xffffffffUL;
+}
+
+/* written straight to the file in 4 KB pieces: little memory needed */
+typedef struct {
+	int h, ok;
+	unsigned char buf[4096];
+	int n;
+} OUTF;
+
+static void out_bytes(OUTF *o, const void *data, size_t len)
+{
+	const unsigned char *p = data;
+	while (len && o->ok) {
+		size_t k = sizeof(o->buf) - (size_t)o->n;
+		if (k > len)
+			k = len;
+		memcpy(o->buf + o->n, p, k);
+		o->n += (int)k;
+		p += k;
+		len -= k;
+		if (o->n == (int)sizeof(o->buf)) {
+			o->ok = pf_write(o->h, o->buf, o->n) == o->n;
+			o->n = 0;
+		}
+	}
+}
+
+static void put32(OUTF *o, unsigned long v)
+{
+	unsigned char b[4];
+	b[0] = (unsigned char)(v >> 24);
+	b[1] = (unsigned char)(v >> 16);
+	b[2] = (unsigned char)(v >> 8);
+	b[3] = (unsigned char)v;
+	out_bytes(o, b, 4);
+}
+
+static void put_blob(OUTF *o, const unsigned char *p, size_t n)
+{
+	put32(o, (unsigned long)n);
+	out_bytes(o, p, n);
+}
+
+static void save_cache(long size, unsigned long sum)
+{
+	static OUTF o;
+	size_t i;
+	if (!tls_roots_cache[0])
+		return;
+	o.h = pf_open(tls_roots_cache, PF_WRITE);
+	if (o.h < 0)
+		return;
+	o.ok = 1;
+	o.n = 0;
+	out_bytes(&o, CACHE_MAGIC, 10);
+	put32(&o, (unsigned long)size);
+	put32(&o, sum);
+	put32(&o, (unsigned long)nanchors);
+	for (i = 0; i < nanchors; i++) {
+		br_x509_trust_anchor *ta = &anchors[i];
+		put_blob(&o, ta->dn.data, ta->dn.len);
+		put32(&o, ta->pkey.key_type);
+		if (ta->pkey.key_type == BR_KEYTYPE_RSA) {
+			put_blob(&o, ta->pkey.key.rsa.n, ta->pkey.key.rsa.nlen);
+			put_blob(&o, ta->pkey.key.rsa.e, ta->pkey.key.rsa.elen);
+		} else {
+			put32(&o, (unsigned long)ta->pkey.key.ec.curve);
+			put_blob(&o, ta->pkey.key.ec.q, ta->pkey.key.ec.qlen);
+		}
+	}
+	if (o.ok && o.n)
+		o.ok = pf_write(o.h, o.buf, o.n) == o.n;
+	pf_close(o.h);
+	if (!o.ok)
+		pf_remove(tls_roots_cache);	/* half a cache is worse than none */
+}
+
+static unsigned long get32(const unsigned char **p, const unsigned char *end, int *bad)
+{
+	unsigned long v;
+	if (end - *p < 4) {
+		*bad = 1;
+		return 0;
+	}
+	v = ((unsigned long)(*p)[0] << 24) | ((unsigned long)(*p)[1] << 16) | ((unsigned long)(*p)[2] << 8) | (*p)[3];
+	*p += 4;
+	return v;
+}
+
+static unsigned char *get_blob(const unsigned char **p, const unsigned char *end, size_t *n, int *bad)
+{
+	unsigned long len = get32(p, end, bad);
+	unsigned char *d;
+	if (*bad || (unsigned long)(end - *p) < len) {
+		*bad = 1;
+		return 0;
+	}
+	d = dup_bytes(*p, len);
+	*p += len;
+	*n = len;
+	if (!d)
+		*bad = 1;
+	return d;
+}
+
+static int load_cache(long size, unsigned long sum)
+{
+	long len;
+	unsigned char *buf = tls_roots_cache[0] ? (unsigned char *)pf_load(tls_roots_cache, &len) : 0;
+	const unsigned char *p, *end;
+	unsigned long count, i;
+	int bad = 0;
+	if (!buf)
+		return 0;
+	p = buf;
+	end = buf + len;
+	if (len < 22 || memcmp(p, CACHE_MAGIC, 10)) {
+		free(buf);
+		return 0;
+	}
+	p += 10;
+	if (get32(&p, end, &bad) != (unsigned long)size || get32(&p, end, &bad) != sum || bad) {
+		free(buf);
+		return 0;
+	}
+	count = get32(&p, end, &bad);
+	anchors = calloc(count ? count : 1, sizeof(*anchors));
+	if (!anchors) {
+		free(buf);
+		return 0;
+	}
+	maxanchors = count;
+	for (i = 0; i < count && !bad; i++) {
+		br_x509_trust_anchor *ta = &anchors[i];
+		size_t n;
+		ta->flags = BR_X509_TA_CA;
+		ta->dn.data = get_blob(&p, end, &ta->dn.len, &bad);
+		ta->pkey.key_type = (unsigned char)get32(&p, end, &bad);
+		if (ta->pkey.key_type == BR_KEYTYPE_RSA) {
+			ta->pkey.key.rsa.n = get_blob(&p, end, &n, &bad);
+			ta->pkey.key.rsa.nlen = n;
+			ta->pkey.key.rsa.e = get_blob(&p, end, &n, &bad);
+			ta->pkey.key.rsa.elen = n;
+		} else {
+			ta->pkey.key.ec.curve = (int)get32(&p, end, &bad);
+			ta->pkey.key.ec.q = get_blob(&p, end, &n, &bad);
+			ta->pkey.key.ec.qlen = n;
+		}
+		if (!bad)
+			nanchors++;
+	}
+	free(buf);
+	return !bad && nanchors == count;
+}
+
 int tls_load_anchors(const char *path, char *err, int errlen)
 {
 	br_pem_decoder_context pc;
 	GROW der;
-	char *pem;
-	long len, pos = 0;
-	int in_cert = 0;
+	char chunk[4096];
+	long got, size;
+	unsigned long sum;
+	int h, in_cert = 0;
 	if (nanchors)
 		return (int)nanchors;
-	pem = pf_load(path, &len);
-	if (!pem) {
+	sum = file_sum(path, &size);
+	if (size < 0) {
 		snprintf(err, errlen, "no root certificates: %s is missing", path);
+		return 0;
+	}
+	if (load_cache(size, sum))
+		return (int)nanchors;
+	nanchors = 0;
+	if (tls_note)
+		tls_note("Reading the root certificates (only this once, it takes a while)...");
+	/* read in pieces: the whole list is about 190 KB, more than a
+	   1 MB Falcon wants to hold at once next to MAIL */
+	h = pf_open(path, PF_READ);
+	if (h < 0) {
+		snprintf(err, errlen, "no root certificates: can't open %s", path);
 		return 0;
 	}
 	der.max = 4096;
 	der.len = 0;
 	der.p = malloc(der.max);
 	br_pem_decoder_init(&pc);
-	while (pos < len && der.p) {
-		pos += br_pem_decoder_push(&pc, pem + pos, len - pos);
-		switch (br_pem_decoder_event(&pc)) {
-		case BR_PEM_BEGIN_OBJ:
-			in_cert = !strcmp(br_pem_decoder_name(&pc), "CERTIFICATE");
-			der.len = 0;
-			br_pem_decoder_setdest(&pc, in_cert ? grow_add : 0, &der);
-			break;
-		case BR_PEM_END_OBJ:
-			if (in_cert && der.p)
-				add_anchor(der.p, der.len);
-			in_cert = 0;
-			break;
-		case BR_PEM_ERROR:
-			pos = len;
-			break;
+	while (der.p && (got = pf_read(h, chunk, sizeof(chunk))) > 0) {
+		long pos = 0;
+		while (pos < got) {
+			pos += (long)br_pem_decoder_push(&pc, chunk + pos, (size_t)(got - pos));
+			switch (br_pem_decoder_event(&pc)) {
+			case BR_PEM_BEGIN_OBJ:
+				in_cert = !strcmp(br_pem_decoder_name(&pc), "CERTIFICATE");
+				der.len = 0;
+				br_pem_decoder_setdest(&pc, in_cert ? grow_add : 0, &der);
+				break;
+			case BR_PEM_END_OBJ:
+				if (in_cert && der.p)
+					add_anchor(der.p, der.len);
+				in_cert = 0;
+				break;
+			case BR_PEM_ERROR:
+				/* not PEM here: start over at the next BEGIN */
+				br_pem_decoder_init(&pc);
+				in_cert = 0;
+				break;
+			}
 		}
+		if (pf_idle)
+			pf_idle();
 	}
+	pf_close(h);
+	if (!der.p)
+		snprintf(err, errlen, "not enough memory to read %s", path);
 	free(der.p);
-	free(pem);
-	if (!nanchors)
+	if (!nanchors && der.p)
 		snprintf(err, errlen, "no root certificates found in %s", path);
+	if (nanchors)
+		save_cache(size, sum);
 	return (int)nanchors;
 }
 

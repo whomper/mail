@@ -17,11 +17,16 @@ typedef struct TLS TLS;
 extern int tls_tz_minutes;
 /* where the random seed is kept between sessions (MAIL\\SEED.DAT) */
 extern char tls_seed_path[200];
+/* the decoded root certificates are kept here (ROOTS.DAT, next to CACERT.PEM) */
+extern char tls_roots_cache[200];
+/* a word for the status line while something slow happens, or NULL */
+extern void (*tls_note)(const char *msg);
 
 /* load the root certificates from a PEM file (once; later calls are
    cheap). Returns how many, or 0 with err filled in */
 int  tls_load_anchors(const char *path, char *err, int errlen);
 int  tls_anchor_count(void);
+void tls_free_anchors(void);	/* forget them (a new CACERT.PEM) */
 
 /* handshake on a connected socket. rsa_only: ask the server for an RSA
    certificate (fast to check, on the DSP); 0 also accepts ECDSA.

@@ -9,6 +9,7 @@
 #include "../src/mail.h"
 #include "../src/compose.h"
 #include "../src/conn.h"
+#include "../src/tls.h"
 #include "../src/plat.h"
 #include "../src/util.h"
 
@@ -853,6 +854,7 @@ int main(void)
 	net_init();
 	pf_idle = idle;
 	mail_status = status;
+	tls_note = status;
 	for (d = 0; d < naccts; d++)
 		folders_load(accts[d]);
 

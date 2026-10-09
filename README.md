@@ -26,14 +26,22 @@ writes Hebrew.
 - Runs on TOS 1.04 to 4.x, EmuTOS, MagiC and MiNT, with STinG or
   MiNTnet; from a 68000 ST in medium resolution to a Falcon in 640×480
 
+Mail providers want encrypted connections. MAIL reaches them one of two
+ways, switched with Options > Falcon mode:
+
 ```
-Atari (MAIL.PRG) --STinG/MiNTnet--> Raspberry Pi (stunnel) --TLS--> your mail provider
+off (default):  Atari (MAIL.PRG) --STinG/MiNTnet--> Raspberry Pi (stunnel) --TLS--> provider
+on:             Falcon (MAIL.PRG, TLS 1.2, RSA on the DSP) --STinG/MiNTnet--TLS--> provider
 ```
 
-Mail providers want encrypted connections, which are too heavy for a
-68000 or 68030, so a Raspberry Pi on your network does the encryption:
-see [gateway/README.md](gateway/README.md). A server that accepts plain
-connections can be used directly.
+- **Off**, on any Atari: a Raspberry Pi on your network does the
+  encryption, see [gateway/README.md](gateway/README.md). A server that
+  accepts plain connections can be used directly.
+- **On**, on a Falcon or TT with 4 MB or more: MAIL does TLS 1.2 itself
+  with [BearSSL](https://bearssl.org/) (third_party/bearssl), built for
+  the 68030, and the Falcon's DSP56001 checks the servers' RSA
+  signatures. It needs `CACERT.PEM` and `ROOTS.DAT` (in this repository)
+  next to MAIL.PRG. See [Falcon mode](docs/GUIDE.md#falcon-mode).
 
 MAIL follows the design of Troll, the GFA-BASIC newsreader and mail
 client by Rajah Lone: the same four windows (folders, message list,
@@ -51,18 +59,26 @@ right-to-left layout and keyboard, and the Hatari test tools.
 3. Start MAIL and fill in your account: the Pi's IP address, ports 143
    (IMAP) and 587 (SMTP), your login.
 
+Or, on a Falcon or TT with 4 MB: copy `MAIL.PRG`, `CACERT.PEM` and
+`ROOTS.DAT` into the folder, skip the Pi, and switch on Options > Falcon
+mode; MAIL fills in the servers for the big providers.
+
 The [user guide](docs/GUIDE.md) describes everything else.
 
 ## Building
 
 ```
 sudo apt install gcc-m68k-linux-gnu      # Debian/Ubuntu
-make                                     # writes MAIL.PRG
+make                                     # writes MAIL.PRG and ROOTS.DAT
 ```
 
 No MiNTLib is needed: the program is freestanding (`atari/`) and
 `tools/elf2tos.py` writes the TOS executable. It is built for the 68000,
-so it runs on every Atari from the ST to the Falcon.
+so it runs on every Atari from the ST to the Falcon; only BearSSL, used in
+Falcon mode, is 68030 code. ROOTS.DAT is CACERT.PEM decoded on the build
+computer by `tools/mkroots.c`, so the Atari doesn't have to.
+The DSP program is `dsp/rsa.a56`; `dsp/mkh.py` assembles it into
+`dsp/rsa_prog.h` (with the `a56` assembler: `cd dsp && a56 rsa.a56 && python3 mkh.py a56.out rsa_prog.h dsp_rsa_prog`).
 
 ## Source
 
@@ -70,7 +86,9 @@ so it runs on every Atari from the ST to the Falcon.
 atari/   TOS runtime: start-up, system calls, a small C library, AES/VDI,
          TCP over STinG/STiK or MiNTnet (with a DNS client)
 src/     the mail core: IMAP, POP3, SMTP, MIME, charsets and Hebrew,
-         bidi, the local store, composing, mail operations
+         bidi, the local store, composing, mail operations, TLS (tls.c)
+dsp/     the DSP56001 program for RSA (Falcon mode)
+third_party/bearssl/  BearSSL 0.6, unchanged
 ui/      the GEM program: windows, drawing, editor, dialogs, menus
 gateway/ the Raspberry Pi gateway (stunnel)
 tests/   unit and integration tests, the Hatari test rig
@@ -87,6 +105,7 @@ real servers before it runs on the Atari:
 make test           # charsets (Hebrew), MIME, message building, bidi
 make itest          # IMAP, POP3, SMTP against a local Dovecot and a test SMTP server
 TLS=1 make itest    # the same through the gateway's stunnel set-up, TLS-only servers
+FALCON=1 make itest # Falcon mode: MAIL's own TLS, implicit TLS and STARTTLS
 ```
 
 `make itest` needs `dovecot-imapd` and `dovecot-pop3d`; `TLS=1` also
@@ -100,6 +119,7 @@ needs `stunnel4`.
 make -C tools/fakesting
 tests/hatari/net_test.py /tmp/mail-net etos512us.img   # Falcon, real servers
 tests/hatari/ui_tour.py WORKDIR etos512us.img          # screenshots of the interface
+tests/hatari/falcon_test.py /tmp/mail-tls etos512us.img --dsp emu   # Falcon mode, TLS + DSP
 ```
 
 `net_test.py` boots an emulated Falcon, where MAIL logs in to Dovecot,

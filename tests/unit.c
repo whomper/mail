@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "charset.h"
 #include "mime.h"
 #include "compose.h"
@@ -13,6 +14,7 @@
 #include "bidi.h"
 #include "util.h"
 #include "plat.h"
+#include "tls.h"
 
 static int fails, checks;
 
@@ -240,12 +242,30 @@ static void t_bidi(void)
 	CHECK(!memcmp(out, "1990 \xDA\xC7\xCD\xD6", 9), "bidi visual [%.9s]", out);
 }
 
+/* the root certificates shipped with MAIL load as BearSSL trust anchors */
+static void t_tls(void)
+{
+	char err[200];
+	int n;
+	snprintf(tls_roots_cache, sizeof(tls_roots_cache), "/tmp/mail-unit-roots.%d", (int)getpid());
+	remove(tls_roots_cache);
+	n = tls_load_anchors("CACERT.PEM", err, sizeof(err));
+	CHECK(n == 121, "CACERT.PEM: %d roots (%s)", n, n ? "" : err);
+	CHECK(tls_load_anchors("CACERT.PEM", err, sizeof(err)) == n, "anchors loaded once");
+	CHECK(pf_size(tls_roots_cache) > 1000, "decoded roots cached");
+	tls_free_anchors();
+	n = tls_load_anchors("CACERT.PEM", err, sizeof(err));
+	CHECK(n == 121, "roots read back from the cache: %d", n);
+	remove(tls_roots_cache);
+}
+
 int main(void)
 {
 	t_charset();
 	t_mime();
 	t_compose();
 	t_bidi();
+	t_tls();
 	printf("%d checks, %d failed\n", checks, fails);
 	return fails != 0;
 }

@@ -14,9 +14,11 @@ reads and writes Hebrew.
 - A TCP/IP stack:
   - **STinG** on plain TOS (or STiK), or
   - **MiNTnet** under FreeMiNT (with or without GlueSTiK), or MagiC-Net
-- For providers that need encryption (nearly all): a Raspberry Pi or
-  other Linux computer on your network as a gateway, see
-  [gateway/README.md](../gateway/README.md)
+- For providers that need encryption (nearly all), one of:
+  - a Raspberry Pi or other Linux computer on your network as a gateway,
+    see [gateway/README.md](../gateway/README.md) (any Atari), or
+  - **Falcon mode**: MAIL does the encryption itself (a Falcon, or a TT,
+    with 4 MB of memory or more), see [Falcon mode](#falcon-mode)
 
 ## Installing
 
@@ -28,6 +30,8 @@ C:\MAIL\MAIL.PRG      the program
 C:\MAIL\MAIL.INF      settings and accounts (each line has a note above it)
 C:\MAIL\ADDRESS.TXT   address book
 C:\MAIL\MAIL.LOG      protocol log, when switched on
+C:\MAIL\CACERT.PEM    root certificates, for Falcon mode only
+C:\MAIL\ROOTS.DAT     the same, decoded ahead of time (Falcon mode only)
 C:\MAIL\MAIL\         your mail: one folder per account, one per mailbox
 ```
 
@@ -53,6 +57,58 @@ Options > Accounts > New, or the dialog MAIL shows at first start:
 MAIL holds up to eight accounts. Edit or delete one with Options >
 Accounts > Edit. Passwords are kept in `MAIL.INF` as typed, so keep that
 file to yourself.
+
+## Falcon mode
+
+MAIL works in one of two ways, chosen with **Options > Falcon mode
+(TLS)** or the checkbox in Options > Settings:
+
+- **Off** (the default, any Atari): MAIL talks plainly to the Raspberry
+  Pi gateway, and the Pi encrypts the connection to your provider.
+- **On**: MAIL encrypts on the Atari itself (TLS 1.2) and talks straight
+  to your provider; no Pi is needed. On a Falcon the DSP56001 checks the
+  servers' certificates (about 0.2 s instead of 1.3 s on the 68030).
+
+Falcon mode needs:
+
+- a 68030 (Falcon, or TT without the DSP part); a 68000 ST is too slow
+- 4 MB of memory or more (1 MB is not enough for TLS next to your mail)
+- `CACERT.PEM` and `ROOTS.DAT` next to `MAIL.PRG`, both from MAIL's
+  GitHub page. CACERT.PEM holds the root certificates MAIL trusts (the
+  Mozilla list); ROOTS.DAT is the same list already decoded, which saves
+  over a minute on the first connection. If you replace CACERT.PEM with a
+  newer one (from [curl.se/docs/caextract.html](https://curl.se/docs/caextract.html)),
+  MAIL decodes it once on the next connection and writes a new ROOTS.DAT
+- the right date, time and time zone (Options > Settings): certificates
+  are only valid between two dates
+- MAIL in fast (TT) RAM if you have it: MAIL.PRG asks TOS for it, and
+  TLS runs twice as fast there as in ST RAM
+
+Each account keeps two sets of servers, so you can switch back and forth
+without typing them again: the gateway's (used when Falcon mode is off)
+and the provider's own (used when it is on). With Falcon mode on,
+Options > Accounts > Edit shows the provider's servers. When you switch
+it on, MAIL fills them in for Gmail, iCloud, Yahoo, GMX, web.de, AOL,
+Fastmail and Zoho from the e-mail address, and names any account whose
+servers you still have to type in. The usual ports:
+
+| Port | What it is                                       |
+|------|--------------------------------------------------|
+| 993  | IMAP over TLS                                    |
+| 995  | POP3 over TLS                                    |
+| 465  | SMTP over TLS                                    |
+| 587  | SMTP, switched to TLS with STARTTLS              |
+| 143, 110 | IMAP, POP3, switched to TLS with STARTTLS    |
+
+For iCloud that is `imap.mail.me.com` 993 and `smtp.mail.me.com` 587; for
+Gmail `imap.gmail.com` 993 and `smtp.gmail.com` 465. Either way MAIL
+never sends a password over an unencrypted connection in Falcon mode.
+
+Connecting takes a few seconds on a 50 MHz Falcon; after that mail comes
+in at modem-to-ISDN speeds (about 60 KB/s), which is plenty for text.
+About > shows how the current connection is made ("TLS with the DSP",
+"TLS on the 68030" or "through the gateway"), and the protocol log
+records the cipher and the timings.
 
 ## The main window
 
@@ -228,6 +284,11 @@ the image and mask for icon editors. For EmuTOS,
 - **"can't connect"**: is the gateway running (`sudo systemctl status
   stunnel4` on the Pi)? Is the address right? Is STinG (or MiNTnet) set
   up — can other network programs reach the Pi?
+- **Falcon mode: "certificate not trusted"**: is CACERT.PEM next to
+  MAIL.PRG, and is the server name right (the certificate must be for
+  that name)? **"certificate out of date"**: check the date, time and
+  time zone. **"not enough memory"**: close other programs, put MAIL in
+  TT RAM, or use the gateway.
 - **"login failed"**: check user and password; Gmail, iCloud and Yahoo
   need an app password.
 - **Options > Protocol log** writes the conversation with the servers to
@@ -235,7 +296,8 @@ the image and mask for icon editors. For EmuTOS,
 
 ## Limits
 
-- No encryption on the Atari itself: use the gateway for TLS.
+- Encryption on the Atari itself (Falcon mode) needs a 68030 and 4 MB;
+  other machines use the gateway. TLS 1.2 only (every provider has it).
 - No OAuth sign-in (Outlook.com, Microsoft 365).
 - Messages are plain text; HTML mail is shown as text and attachments are
   saved, not shown.
