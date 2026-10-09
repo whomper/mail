@@ -6,6 +6,7 @@
 #
 #   sudo ./install.sh imap.gmail.com smtp.gmail.com [pop.gmail.com]
 #   sudo ./install.sh --allow 192.168.1.50 imap.gmail.com smtp.gmail.com
+#   sudo ./install.sh imap.mail.me.com smtp.mail.me.com:587     (iCloud)
 #
 # --allow ATARI_IP  only that address may use the gateway (needs ufw).
 # --ports I,S,P     the ports on the Pi for IMAP, SMTP and POP3, when the
@@ -31,6 +32,15 @@ done
 IMAP=${1:?$USAGE}
 SMTP=${2:?$USAGE}
 POP3=${3:-}
+# SMTP_SERVER:587 for providers that take mail only with STARTTLS
+# (iCloud: smtp.mail.me.com:587); otherwise port 465, TLS from the start
+SMTP_PORT=465
+if [[ "$SMTP" == *:* ]]; then
+  SMTP_PORT=${SMTP##*:}
+  SMTP=${SMTP%%:*}
+fi
+SMTP_PROTO=""
+[ "$SMTP_PORT" = 587 ] && SMTP_PROTO="protocol = smtp"
 
 if [ "$(id -u)" != 0 ]; then
   echo "Please run with sudo." >&2
@@ -61,7 +71,8 @@ checkHost = $IMAP
 [smtp]
 client = yes
 accept = 0.0.0.0:$P_SMTP
-connect = $SMTP:465
+connect = $SMTP:$SMTP_PORT
+$SMTP_PROTO
 checkHost = $SMTP
 CONF
 if [ -n "$POP3" ]; then

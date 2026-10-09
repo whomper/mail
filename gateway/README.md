@@ -92,18 +92,11 @@ sudo ./install.sh --allow 192.168.1.50 imap.gmail.com smtp.gmail.com
 ## Servers with STARTTLS only
 
 `install.sh` uses the TLS ports (993, 995, 465). For an SMTP server that
-offers only port 587 with STARTTLS, edit `/etc/stunnel/atari-mail.conf`:
+takes mail only on port 587 with STARTTLS, such as iCloud, add `:587`:
 
 ```
-[smtp]
-client = yes
-accept = 0.0.0.0:1025
-connect = smtp.mail.me.com:587
-protocol = smtp
-checkHost = smtp.mail.me.com
+sudo ./install.sh imap.mail.me.com smtp.mail.me.com:587
 ```
-
-and `sudo systemctl restart stunnel4`.
 
 ## Tested
 
