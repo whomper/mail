@@ -12,6 +12,7 @@
 #include <ctype.h>
 #include "charset.h"
 #include "charset_tab.h"
+#include "bidi.h"
 
 typedef unsigned char u8;
 
@@ -231,15 +232,53 @@ static int looks_atari_hebrew(const u8 *s, long n, int cs)
 	return heb * 10 >= high * 9;
 }
 
+/* Such a bridge also turns each Hebrew line around for programs without
+ * a bidi layout of their own, so it shows the right way round from left
+ * to right. MAIL lays Hebrew out itself, so the lines are turned back
+ * into reading order first. The paragraph's direction is the one most
+ * of its letters have: in display order the first letter may well be
+ * the Latin word that ended a Hebrew sentence. */
+int cs_bridge_visual = 1;
+
+static void to_logical(char *s, long n)
+{
+	char tmp[BIDI_MAX];
+	long start = 0, i;
+	for (i = 0; i <= n; i++) {
+		if (i < n && s[i] != '\n')
+			continue;
+		{
+			long len = i - start, k, heb = 0, lat = 0;
+			char *line = s + start;
+			for (k = 0; k < len; k++) {
+				unsigned char c = (unsigned char)line[k];
+				if (c >= 0xC2 && c <= 0xDC)
+					heb++;
+				else if ((c | 0x20) >= 'a' && (c | 0x20) <= 'z')
+					lat++;
+			}
+			if (len > 0 && len <= BIDI_MAX && heb) {
+				short cr = line[len - 1] == '\r';
+				bidi_visual(line, (short)(len - cr), heb >= lat, tmp);
+				memcpy(line, tmp, len - cr);
+			}
+		}
+		start = i + 1;
+	}
+}
+
 char *cs_to_atari(const char *src, long n, int cs, long *outlen)
 {
+	int bridged = 0;
 	const u8 *s = (const u8 *)src;
 	char *out = malloc(n * 3 + 1), *p = out;
 	long i = 0;
 	if (!out)
 		return 0;
-	if (cs != CS_ATARI && looks_atari_hebrew(s, n, cs))
+	if (cs != CS_ATARI && looks_atari_hebrew(s, n, cs)) {
 		cs = CS_ATARI;
+		bridged = cs_bridge_visual;
+	}
 	if (cs == CS_ATARI) {
 		memcpy(out, src, n);
 		p = out + n;
@@ -257,6 +296,8 @@ char *cs_to_atari(const char *src, long n, int cs, long *outlen)
 		}
 	}
 	*p = 0;
+	if (bridged)
+		to_logical(out, p - out);
 	if (outlen)
 		*outlen = p - out;
 	return out;

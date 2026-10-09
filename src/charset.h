@@ -22,6 +22,9 @@ unsigned long atari_to_uni(unsigned char c);
 
 /* convert n bytes of text in charset cs to Atari; malloc'ed, NUL-terminated */
 char *cs_to_atari(const char *src, long n, int cs, long *outlen);
+/* 1: text a Troll-era bridge already made Atari text is in display
+   order; cs_to_atari() turns its Hebrew lines back (MAIL.INF bridgeorder) */
+extern int cs_bridge_visual;
 /* Atari text -> UTF-8; malloc'ed, NUL-terminated */
 char *atari_to_utf8(const char *src, long n, long *outlen);
 

@@ -9,6 +9,7 @@
 #include "ui.h"
 #include "../src/bidi.h"
 #include "../src/util.h"
+#include "../src/charset.h"
 
 #define DMAX 72
 #define TMAX 24
@@ -511,7 +512,7 @@ int dlg_account(ACCOUNT *a)
 int dlg_settings(void)
 {
 	static char tz[6], check[4], hdrs[5], wrap[3];
-	short f_tz, f_check, f_hdrs, f_wrap, f_keep, f_log, f_heb, b_ok, r;
+	short f_tz, f_check, f_hdrs, f_wrap, f_keep, f_log, f_heb, f_bridge, b_ok, r;
 	snprintf(tz, sizeof(tz), "%d", opt.tz);
 	snprintf(check, sizeof(check), "%d", opt.check);
 	snprintf(hdrs, sizeof(hdrs), "%d", opt.page);
@@ -530,6 +531,7 @@ int dlg_settings(void)
 	f_keep = d_check(2, 8, "Keep read messages on disk", opt.keepcache);
 	f_log = d_check(2, 9, "Write a protocol log (MAIL.LOG)", opt.log);
 	f_heb = d_check(2, 10, "Start with the Hebrew keyboard", opt.hebrew);
+	f_bridge = d_check(2, 11, "Bridge sends Hebrew reversed (Troll bridge)", cs_bridge_visual);
 	d_button(28, 13, 10, "Cancel", EXIT);
 	b_ok = d_button(40, 13, 10, "OK", EXIT | DEFAULT);
 	d_end();
@@ -550,6 +552,7 @@ int dlg_settings(void)
 	opt.keepcache = selected(f_keep);
 	opt.log = selected(f_log);
 	opt.hebrew = selected(f_heb);
+	cs_bridge_visual = selected(f_bridge);
 	return 1;
 }
 

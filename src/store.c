@@ -164,6 +164,7 @@ static void set_opt(const char *k, const char *v)
 	else if (!strcmp(k, "panes")) shorts(v, &opt.pane_w, 2);
 	else if (!strcmp(k, "editor")) shorts(v, &opt.ed_x, 4);
 	else if (!strcmp(k, "font")) shorts(v, &opt.font_id, 2);
+	else if (!strcmp(k, "bridgeorder")) cs_bridge_visual = n != 0;
 	else if (!strcmp(k, "hebfont")) opt.hebfont = n >= 0 && n <= 2 ? n : 0;
 }
 
@@ -266,6 +267,9 @@ int store_save_settings(void)
 	note(&b, "where the screen font has its Hebrew letters: 0 = Atari (standard TOS font),");
 	note(&b, "1 = ISO-8859-8 places (Israeli Hebrew fonts), 2 = DOS 862 places; set in Options > Font");
 	sb_printf(&b, "hebfont=%d\r\n", opt.hebfont);
+	note(&b, "1 = Hebrew that arrives already in Atari characters (from a bridge made for");
+	note(&b, "Troll) is in display order: turn it back into reading order; set in Options > Settings");
+	sb_printf(&b, "bridgeorder=%d\r\n", cs_bridge_visual);
 	for (i = 0; i < naccts; i++) {
 		ACCOUNT *a = accts[i];
 		sb_adds(&b, "\r\n; one [account] part per account, up to 8; Options > Accounts edits them\r\n"
@@ -585,10 +589,38 @@ void fold_count(FOLDER *f)
 	}
 }
 
+/* Index files before version 3 hold headers that MAIL 0.2 misread when
+ * a bridge had already turned them into Atari text. Read them again from
+ * the messages on disk; IMAP headers without one are dropped, and the
+ * next sync fetches them again from the server. */
+static void upgrade_headers(FOLDER *f)
+{
+	long i;
+	for (i = f->n - 1; i >= 0; i--) {
+		HDR *h = &f->h[i];
+		char path[220], *raw;
+		long len;
+		msg_path(f, h->uid, path, sizeof(path));
+		raw = pf_load(path, &len);
+		if (raw) {
+			unsigned short flags = h->flags;
+			long size = h->size;
+			hdr_from_raw(h, raw, len);
+			h->flags |= flags;
+			h->size = size;
+			free(raw);
+		} else if (f->fi && !f->fi->local) {
+			fold_remove(f, h->uid);
+		}
+	}
+	f->dirty = 1;
+}
+
 FOLDER *fold_open(ACCOUNT *a, FINFO *fi)
 {
 	FOLDER *f = calloc(1, sizeof(FOLDER));
 	char path[220], *buf, *line, *next;
+	short version;
 	if (!f)
 		return 0;
 	f->acct = a;
@@ -600,13 +632,14 @@ FOLDER *fold_open(ACCOUNT *a, FINFO *fi)
 	buf = pf_load(path, 0);
 	if (!buf)
 		return f;
+	version = 0;
 	for (line = buf; line && *line; line = next) {
 		next = strchr(line, '\n');
 		if (next)
 			*next++ = 0;
 		if (!strncmp(line, "MAILIDX ", 8)) {
 			char *e;
-			strtoul(line + 8, &e, 10);
+			version = (short)strtoul(line + 8, &e, 10);
 			f->uidvalidity = strtoul(e, &e, 10);
 			f->uidnext = strtoul(e, &e, 10);
 			f->window = strtol(e, &e, 10);
@@ -638,6 +671,8 @@ FOLDER *fold_open(ACCOUNT *a, FINFO *fi)
 	}
 	free(buf);
 	f->dirty = 0;
+	if (version < 3)
+		upgrade_headers(f);
 	fold_count(f);
 	return f;
 }
@@ -649,7 +684,7 @@ int fold_save(FOLDER *f)
 	long i;
 	int r;
 	sb_init(&b);
-	sb_printf(&b, "MAILIDX 2 %lu %lu %ld %ld\n", f->uidvalidity, f->uidnext, f->window, f->exists);
+	sb_printf(&b, "MAILIDX 3 %lu %lu %ld %ld\n", f->uidvalidity, f->uidnext, f->window, f->exists);
 	for (i = 0; i < f->n; i++) {
 		HDR *h = &f->h[i];
 		sb_printf(&b, "%lu\t%x\t%ld\t%lu\t", h->uid, h->flags, h->size, h->date);
