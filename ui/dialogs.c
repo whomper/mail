@@ -416,9 +416,9 @@ static void line_to_sig(char *d, const char *s, int size)
 int dlg_account(ACCOUNT *a)
 {
 	static char name[32], full[32], email[44], host[40], port[7], user[44], pass[32],
-		    shost[40], sport[7], suser[44], spass[32], sig[50];
+		    shost[40], sport[7], suser[44], spass[32], sig[50], sig2[50];
 	short f_name, f_full, f_email, f_imap, f_pop, f_host, f_port, f_user, f_pass, f_leave,
-	      f_shost, f_sport, f_suser, f_spass, f_sig, b_ok, b_del, r;
+	      f_shost, f_sport, f_suser, f_spass, f_sig, f_sig2, b_ok, b_del, r;
 
 	str_copy(name, a->name, sizeof(name));
 	str_copy(full, a->fullname, sizeof(full));
@@ -436,7 +436,16 @@ int dlg_account(ACCOUNT *a)
 	snprintf(sport, sizeof(sport), "%u", opt.falcon ? acct_port(a, 1) : a->smtpport);
 	str_copy(suser, opt.falcon ? a->dsmtpuser : a->smtpuser, sizeof(suser));
 	str_copy(spass, opt.falcon ? a->dsmtppass : a->smtppass, sizeof(spass));
-	sig_to_line(sig, a->signature, sizeof(sig));
+	/* two lines to edit; a third and more stay in line 2 after a "|" */
+	{
+		const char *nl = strchr(a->signature, '\n');
+		long n1 = nl ? nl - a->signature : (long)strlen(a->signature);
+		if (n1 > (long)sizeof(sig) - 1)
+			n1 = sizeof(sig) - 1;
+		memcpy(sig, a->signature, n1);
+		sig[n1] = 0;
+		sig_to_line(sig2, nl ? nl + 1 : "", sizeof(sig2));
+	}
 
 	d_begin(62, 23);
 	d_add(G_STRING, 0, 0, (long)"Mail account", 2, 1, 12, 1);
@@ -474,14 +483,15 @@ int dlg_account(ACCOUNT *a)
 	d_text(17, 17, "(empty: as incoming, \"-\": no login)");
 	d_text(2, 18, "Signature:");
 	f_sig = d_edit(13, 18, sig, 46, 'X');
-	d_text(13, 19, "(\"|\" starts a new line)");
+	f_sig2 = d_edit(13, 19, sig2, 46, 'X');
 
 	b_del = d_button(2, 21, 10, "Delete", EXIT);
 	d_button(38, 21, 10, "Cancel", EXIT);
 	b_ok = d_button(50, 21, 10, "OK", EXIT | DEFAULT);
 	d_end();
 	(void)f_name; (void)f_full; (void)f_email; (void)f_host; (void)f_port; (void)f_user;
-	(void)f_pass; (void)f_shost; (void)f_sport; (void)f_suser; (void)f_spass; (void)f_sig; (void)f_imap;
+	(void)f_pass; (void)f_shost; (void)f_sport; (void)f_suser; (void)f_spass; (void)f_sig; (void)f_sig2;
+	(void)f_imap;
 
 	r = d_do(f_name);
 	if (r == b_del) {
@@ -536,7 +546,11 @@ int dlg_account(ACCOUNT *a)
 		str_copy(a->smtppass, spass, sizeof(a->smtppass));
 	}
 	acct_fill_logins(a);		/* a new account: the other mode starts the same */
-	line_to_sig(a->signature, sig, sizeof(a->signature));
+	{
+		char both[110];
+		snprintf(both, sizeof(both), sig2[0] ? "%s|%s" : "%s", sig, sig2);
+		line_to_sig(a->signature, both, sizeof(a->signature));
+	}
 	return 1;
 }
 

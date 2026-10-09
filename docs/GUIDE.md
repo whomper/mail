@@ -52,7 +52,7 @@ Options > Accounts > New, or the dialog MAIL shows at first start:
 | POP3: leave mail on the server | keep a copy on the server after downloading    |
 | Outgoing       | the Pi's IP and 587 through the gateway; leave User empty to use the incoming login, or type `-` for a server that needs none |
 | Passwords      | shown as `*`; click the eye beside the field to see what you typed |
-| Signature      | added below new messages; `|` starts a new line                  |
+| Signature      | two lines, added below new messages (a `|` in line 2 starts a third) |
 
 MAIL holds up to eight accounts. Edit or delete one with Options >
 Accounts > Edit. Passwords are kept in `MAIL.INF` as typed, so keep that
