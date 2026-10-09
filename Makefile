@@ -35,13 +35,13 @@ BSSLOBJ  = $(patsubst $(BSSL)/src/%.c,$(OBJDIR)/bssl/%.o,$(BSSLSRC))
 HBSSLOBJ = $(patsubst $(BSSL)/src/%.c,$(OBJDIR)/hbssl/%.o,$(BSSLSRC))
 
 CORE    := util charset mime conn tls imap pop3 smtp store compose mail futil bidi
-ATARI   := libc tos plat_tos net_tos sting gem
+ATARI   := libc tos plat_tos net_tos sting gem dsprsa
 UI      := main draw win folders list reader editor dialogs popup font about dsp
 
 OBJDIR  := build
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/sting_s.o $(OBJDIR)/nf.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(CORE) $(ATARI) $(UI)))
-HDRS    := $(wildcard src/*.h atari/*.h atari/include/*.h ui/*.h)
+HDRS    := $(wildcard src/*.h atari/*.h atari/include/*.h ui/*.h dsp/*.h)
 
 all: MAIL.PRG
 
