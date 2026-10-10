@@ -33,7 +33,8 @@ int  mail_flag(FOLDER *f, HDR *h, unsigned short flags, int add);
 int  mail_flags_pending(FOLDER *f);
 int  mail_push_flags(FOLDER *f);
 int  mail_delete(FOLDER *f, HDR *h);
-int  mail_mark_all_read(ACCOUNT *a, FINFO *fi);	/* the whole folder, on the server too */
+int  mail_mark_all_read(ACCOUNT *a, FINFO *fi, FOLDER *open);	/* the whole folder, on the server too; open: the
+   folder if the screen has it open (it is changed itself), or NULL */
 int  mail_move(FOLDER *f, HDR *h, FINFO *dest);
 
 int  mail_queue(ACCOUNT *a, const char *raw, long len);	/* into the Outbox */

@@ -287,6 +287,9 @@ out=$(run sync 1 Big)
 expect "reading updates the server's unread count" "synced: 250 total, 5 unread" "$out"
 
 out=$(run allread 1 Big)
+out=$(run list 1 Big)
+if grep -qP "^\d+\tN" <<<"$out"; then FAIL=$((FAIL+1)); echo "FAIL mark all as read: the list still has unread ones"
+else PASS=$((PASS+1)); echo "ok   mark all as read: the list shows them read at once"; fi
 out=$(run sync 1 Big)
 expect "mark all as read reaches the server" "synced: 250 total, 0 unread" "$out"
 

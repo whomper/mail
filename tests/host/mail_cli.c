@@ -242,7 +242,13 @@ int main(int argc, char **argv)
 		r = 0;
 	} else if (!strcmp(cmd, "allread") && a && argc > 4) {
 		FINFO *fi = find_folder(a, argv[4]);
-		if (!fi || !mail_mark_all_read(a, fi))
+		FOLDER *f = fi ? fold_open(a, fi) : 0;	/* open, as on the screen */
+		int ok = f && mail_mark_all_read(a, fi, f);
+		if (f) {
+			f->dirty = 1;			/* and saved after, as on the screen */
+			fold_close(f);
+		}
+		if (!ok)
 			return fail("allread");
 		printf("ok\n");
 	} else if (!strcmp(cmd, "mkdir") && a && argc > 4) {

@@ -845,31 +845,38 @@ static void count_gone(FOLDER *f, HDR *h)
 		f->exists--;
 }
 
-int mail_mark_all_read(ACCOUNT *a, FINFO *fi)
+int mail_mark_all_read(ACCOUNT *a, FINFO *fi, FOLDER *open)
 {
 	FOLDER *f;
 	long i;
+	int later = 0;			/* not connected: tell the server next time */
 	if (!fi->local) {
 		int r;
-		if (!select_folder(a, fi))
-			return 0;
-		if (a->im->exists) {
+		if (opt.offline || a->cut || !select_folder(a, fi)) {
+			if (!opt.offline && !a->cut && !mail_unreachable)
+				return 0;
+			later = 1;
+		} else if (a->im->exists) {
 			r = imap_store_seq(a->im, "1:*", 1, MF_SEEN);
 			if (r <= 0)
 				return imap_failed(a, r);
 		}
 		fi->unread = 0;
 	}
-	f = fold_open(a, fi);
+	/* the folder on the screen is changed itself: changing a copy of it
+	   on disk would be undone when the screen's copy is saved */
+	f = open ? open : fold_open(a, fi);
 	if (!f)
 		return 0;
 	for (i = 0; i < f->n; i++) {
 		if (!(f->h[i].flags & MF_SEEN)) {
-			f->h[i].flags |= MF_SEEN;
+			f->h[i].flags |= MF_SEEN | (later ? MF_FLAGSYNC : 0);
 			f->dirty = 1;
 		}
 	}
-	fold_close(f);
+	fold_count(f);
+	if (!open)
+		fold_close(f);
 	folders_save(a);
 	return 1;
 }

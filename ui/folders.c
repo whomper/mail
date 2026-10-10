@@ -231,14 +231,11 @@ static void rclick(WIN *w, short mx, short my)
 		case 2:
 			busy(1);
 			mail_err[0] = 0;
-			if (!mail_mark_all_read(a, fi) && mail_err[0])
+			if (!mail_mark_all_read(a, fi, fi == cur_finfo ? cur_folder : 0) && mail_err[0])
 				alert(1, "[1][%s][ OK ]", mail_err);
 			busy(0);
-			if (fi == cur_finfo && cur_folder) {
-				fold_close(cur_folder);
-				cur_folder = fold_open(a, fi);
+			if (fi == cur_finfo && cur_folder)
 				list_refresh();
-			}
 			folders_build();
 			break;
 		case 4:
