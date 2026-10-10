@@ -669,9 +669,16 @@ static short d_field(short x, short y, char *buf, short len, char kind)
 
 /* rows of a part: y in characters plus a few pixels per framed field
    above, so the frames don't touch */
-static short row_pix;
-#define ROW(y) ((short)((y) | (row_pix << 8)))
-#define FIELD_GAP 4
+/* rows of a part, with some air between them: row n of a part starting
+   at line y is n lines and n gaps down (6 pixels with the 16-pixel font) */
+static short row_y0, row_gap;
+#define ROW(n) ((short)((row_y0 + (n)) | ((2 + (n) * row_gap) << 8)))
+
+static void rows_at(short y)
+{
+	row_y0 = y;
+	row_gap = (short)(gl_hchar * 3 / 8);
+}
 
 /* objects added from here on belong to page p (0: always shown) */
 static short adding_page;
@@ -789,75 +796,72 @@ static void settings_begin(short w, short h)
    returns its height: characters, plus pixels in the high byte */
 #define FX 30
 
-static short part_mail(short x, short y)
+static void part_mail(short x, short y)
 {
-	row_pix = 2;
-	d_add(G_STRING, 0, 0, (long)"Check for new mail every", x, ROW(y), 24, 1);
-	d_field(x + FX, ROW(y), s_check, 3, '9');
-	d_add(G_STRING, 0, 0, (long)"min", x + FX + 4, ROW(y), 3, 1);
-	row_pix += FIELD_GAP;
-	d_add(G_STRING, 0, 0, (long)"Messages to load at a time", x, ROW(y + 1), 26, 1);
-	d_field(x + FX, ROW(y + 1), s_page, 4, '9');
-	row_pix += FIELD_GAP;
-	d_tick(x, ROW(y + 2), "Keep read messages on disk", T_KEEP);
-	return (short)(3 | ((row_pix + 2) << 8));
+	rows_at(y);
+	d_add(G_STRING, 0, 0, (long)"Check for new mail every", x, ROW(0), 24, 1);
+	d_field(x + FX, ROW(0), s_check, 3, '9');
+	d_add(G_STRING, 0, 0, (long)"min", x + FX + 4, ROW(0), 3, 1);
+	d_add(G_STRING, 0, 0, (long)"Messages to load at a time", x, ROW(1), 26, 1);
+	d_field(x + FX, ROW(1), s_page, 4, '9');
+	d_tick(x, ROW(2), "Keep read messages on disk", T_KEEP);
 }
 
-static short part_writing(short x, short y)
+static void part_writing(short x, short y)
 {
-	row_pix = 2;
-	d_add(G_STRING, 0, 0, (long)"Wrap my lines at column", x, ROW(y), 23, 1);
-	d_field(x + FX, ROW(y), s_wrap, 2, '9');
-	row_pix += FIELD_GAP;
-	d_tick(x, ROW(y + 1), "Start with the Hebrew keyboard", T_HEB);
-	d_tick(x, ROW(y + 2), "Hebrew from a Troll bridge is reversed", T_BRIDGE);
-	return (short)(3 | ((row_pix + 2) << 8));
+	rows_at(y);
+	d_add(G_STRING, 0, 0, (long)"Wrap my lines at column", x, ROW(0), 23, 1);
+	d_field(x + FX, ROW(0), s_wrap, 2, '9');
+	d_tick(x, ROW(1), "Start with the Hebrew keyboard", T_HEB);
+	d_tick(x, ROW(2), "Hebrew from a Troll bridge is reversed", T_BRIDGE);
 }
 
-static short part_connection(short x, short y)
+static void part_connection(short x, short y)
 {
-	row_pix = 2;
-	d_add(G_STRING, 0, 0, (long)"Time zone, minutes from UTC", x, ROW(y), 27, 1);
-	d_field(x + FX, ROW(y), s_tz, 5, 'X');
-	row_pix += FIELD_GAP;
-	d_tick(x, ROW(y + 1), "Falcon mode: TLS on this Atari", T_FALCON);
-	d_add(G_STRING, 0, 0, (long)"off: plain, through the Pi gateway", x + 3, ROW(y + 2), 34, 1);
-	d_tick(x + 3, ROW(y + 3), "Use the DSP for the signatures", T_DSP);
-	d_tick(x, ROW(y + 4), "Write a protocol log (EMAIL.LOG)", T_LOG);
-	return (short)(5 | ((row_pix + 2) << 8));
+	rows_at(y);
+	d_add(G_STRING, 0, 0, (long)"Time zone, minutes from UTC", x, ROW(0), 27, 1);
+	d_field(x + FX, ROW(0), s_tz, 5, 'X');
+	d_tick(x, ROW(1), "Falcon mode: TLS on this Atari", T_FALCON);
+	d_add(G_STRING, 0, 0, (long)"off: plain, through the Pi gateway", x + 3, ROW(2), 34, 1);
+	d_tick(x + 3, ROW(3), "Use the DSP for the signatures", T_DSP);
+	d_tick(x, ROW(4), "Write a protocol log (EMAIL.LOG)", T_LOG);
 }
+
+#define SW 13			/* the list's width */
+#define SX (SW + 2)		/* where the settings start */
 
 static short settings_sidebar(short *ok)
 {
 	static const char *names[] = { "  Mail", "  Writing", "  Connection" };
-	short k, box, from;
-	settings_begin(60, 15);
-	d_band(60, " Settings");
+	short k, box, from, gap = (short)(gl_hchar / 2);
+	settings_begin(SX + 42, 16);
+	d_band(SX + 42, " Settings");
 	/* the list: plain words on white, the chosen one in a black bar, a
 	   line between it and the settings */
-	d_add(G_BOX, 0, 0, 0x00001171L, 16, 1, (short)(0 | (1 << 8)), 14);
+	d_add(G_BOX, 0, 0, 0x00001171L, SW, 1, (short)(0 | (1 << 8)), 15);
 	for (k = 0; k < 3; k++) {
 		npages++;
 		page_tab[npages] = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long)d_ted(names[k], 0, 0x1180),
-					 (short)(0 | (2 << 8)), 2 + k * 2, (short)(15 | (6 << 8)), 1);
+					 (short)(0 | (2 << 8)), (short)((2 + k * 2) | ((k * gap) << 8)),
+					 (short)((SW - 1) | (6 << 8)), 1);
 	}
-	box = d_add(G_IBOX, 0, 0, 0, 17, 2, 42, 9);
+	box = d_add(G_IBOX, 0, 0, 0, SX - 1, 2, 42, 12);
 	for (k = 1; k <= 3; k++) {
 		from = nobj;
 		adding_page = k;
-		d_add(G_STRING, 0, 0, (long)(names[k - 1] + 2), 18, 2, (short)strlen(names[k - 1] + 2), 1);
-		d_add(G_BOX, 0, 0, 0x00001171L, 18, (short)(3 | (2 << 8)), 40, (short)(0 | (1 << 8)));
+		d_add(G_STRING, 0, 0, (long)(names[k - 1] + 2), SX, 2, (short)strlen(names[k - 1] + 2), 1);
+		d_add(G_BOX, 0, 0, 0x00001171L, SX, (short)(3 | (2 << 8)), 40, (short)(0 | (1 << 8)));
 		if (k == 1)
-			part_mail(18, 4);
+			part_mail(SX, 4);
 		else if (k == 2)
-			part_writing(18, 4);
+			part_writing(SX, 4);
 		else
-			part_connection(18, 4);
+			part_connection(SX, 4);
 		page_mark(from);
 	}
 	adding_page = 0;
-	d_button(36, 12, 10, "Cancel", EXIT);
-	*ok = d_button(48, 12, 10, "OK", EXIT | DEFAULT);
+	d_button(SX + 18, 14, 10, "Cancel", EXIT);
+	*ok = d_button(SX + 30, 14, 10, "OK", EXIT | DEFAULT);
 	d_end();
 	show_page(1, 0);
 	return box;
