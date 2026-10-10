@@ -11,8 +11,7 @@
 
 enum {
 	CS_ASCII, CS_UTF8, CS_LATIN1, CS_LATIN15, CS_CP1252, CS_ISO8859_8,
-	CS_CP1255, CS_ATARI,
-	CS_ATARI_VISUAL		/* the Falcon mail proxy's x-atari-st: Atari text, display order */
+	CS_CP1255, CS_ATARI
 };
 
 int cs_id(const char *name);			/* charset name -> CS_*, unknown -> CS_LATIN1 */
@@ -23,9 +22,6 @@ unsigned long atari_to_uni(unsigned char c);
 
 /* convert n bytes of text in charset cs to Atari; malloc'ed, NUL-terminated */
 char *cs_to_atari(const char *src, long n, int cs, long *outlen);
-/* 1: text a Troll-era bridge already made Atari text is in display
-   order; cs_to_atari() turns its Hebrew lines back (EMAIL.INF bridgeorder) */
-extern int cs_bridge_visual;
 /* Atari text -> UTF-8; malloc'ed, NUL-terminated */
 char *atari_to_utf8(const char *src, long n, long *outlen);
 

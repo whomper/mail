@@ -39,10 +39,6 @@ int cs_id(const char *name)
 		return CS_CP1255;
 	if (!strcmp(n, "atari") || !strcmp(n, "atarist"))
 		return CS_ATARI;
-	/* falcon_imap_logproxy.py (whomper/atari_web), made for Troll: bodies
-	   say x-atari-st, Subject and From words just "x" */
-	if (!strcmp(n, "x-atari-st") || !strcmp(n, "x"))
-		return CS_ATARI_VISUAL;
 	return CS_LATIN1;	/* iso-8859-1 and anything unknown */
 }
 
@@ -192,145 +188,13 @@ static unsigned long next_char(const u8 *s, long n, long *i, int cs)
 	}
 }
 
-/* Text that is already in the Atari character set although it says
- * otherwise: a mail bridge made for older Atari programs (Troll) turns
- * mail into Atari text on the way, Hebrew at 0xC2-0xDC, and leaves the
- * charset as it was. Such text isn't valid UTF-8, and its 8-bit bytes
- * are nearly all Atari Hebrew letters standing next to each other, which
- * real Latin-1, ISO-8859-8 or windows-1255 text never is. */
-static int valid_utf8(const u8 *s, long n)
-{
-	long i = 0;
-	while (i < n) {
-		u8 c = s[i++];
-		short need = c < 0x80 ? 0 : (c & 0xE0) == 0xC0 ? 1 : (c & 0xF0) == 0xE0 ? 2 :
-			     (c & 0xF8) == 0xF0 ? 3 : -1;
-		if (need < 0 || i + need > n)
-			return 0;
-		for (; need > 0; need--)
-			if ((s[i++] & 0xC0) != 0x80)
-				return 0;
-	}
-	return 1;
-}
-
-static int looks_atari_hebrew(const u8 *s, long n, int cs)
-{
-	long i, high = 0, heb = 0, pairs = 0;
-	for (i = 0; i < n; i++) {
-		if (s[i] < 0x80)
-			continue;
-		high++;
-		if (s[i] >= 0xC2 && s[i] <= 0xDC) {
-			heb++;
-			if (i + 1 < n && s[i + 1] >= 0xC2 && s[i + 1] <= 0xDC)
-				pairs++;
-		}
-	}
-	if (!pairs)
-		return 0;
-	/* said to be UTF-8 but isn't: half Hebrew letters is enough */
-	if (cs == CS_UTF8)
-		return heb * 2 >= high && !valid_utf8(s, n);
-	/* the single-byte charsets, whose Hebrew would be at 0xE0-0xFA */
-	return heb * 10 >= high * 9;
-}
-
-/* Such a bridge also turns each Hebrew line around for programs without
- * a bidi layout of their own, so it shows the right way round from left
- * to right. EMail lays Hebrew out itself, so the lines are turned back
- * into reading order first. The paragraph's direction is the one most
- * of its letters have: in display order the first letter may well be
- * the Latin word that ended a Hebrew sentence. */
-int cs_bridge_visual = 1;
-
-static int is_heb(unsigned char c)
-{
-	return c >= 0xC2 && c <= 0xDC;
-}
-
-static int is_latin(unsigned char c)
-{
-	return ((c | 0x20) >= 'a' && (c | 0x20) <= 'z') || (c >= 0x80 && !is_heb(c) && c < 0xB0);
-}
-
-/* The proxy gives each paragraph (lines up to a blank one) the direction
- * of its first letter, and turns its lines around for that direction. In
- * display order a left-to-right paragraph begins, at the left, with that
- * Latin letter; a right-to-left one with its last word or a full stop. */
-static void to_logical(char *s, long n)
-{
-	char tmp[BIDI_MAX];
-	long i = 0;
-	while (i < n) {
-		long pend = i, k, ls;
-		short rtl = -1;
-		/* the paragraph: lines up to an empty one (an empty line alone
-		   is a paragraph of its own, with nothing to turn) */
-		for (;;) {
-			long e = pend;
-			short blank = 1;
-			while (e < n && s[e] != '\n') {
-				if (s[e] != ' ' && s[e] != '\r')
-					blank = 0;
-				e++;
-			}
-			if (blank && pend > i)
-				break;
-			pend = e < n ? e + 1 : e;
-			if (blank || pend >= n)
-				break;
-		}
-		/* its direction, from the first line with a letter */
-		for (k = i; k < pend && rtl < 0; k++) {
-			unsigned char c = (unsigned char)s[k];
-			if (is_heb(c))
-				rtl = 1;
-			else if (is_latin(c)) {
-				/* a line of Latin only is left alone by the proxy, and
-				   says the paragraph is left to right */
-				rtl = 0;
-			}
-		}
-		if (rtl < 0)
-			rtl = 1;
-		/* turn the lines around */
-		for (ls = i; ls < pend; ) {
-			long le = ls, len;
-			short has = 0;
-			while (le < pend && s[le] != '\n')
-				le++;
-			len = le - ls;
-			if (len && s[ls + len - 1] == '\r')
-				len--;
-			for (k = ls; k < ls + len; k++)
-				if (is_heb((unsigned char)s[k]))
-					has = 1;
-			if (has && len <= BIDI_MAX) {
-				bidi_visual(s + ls, (short)len, rtl, tmp);
-				memcpy(s + ls, tmp, len);
-			}
-			ls = le + 1;
-		}
-		i = pend;
-	}
-}
-
 char *cs_to_atari(const char *src, long n, int cs, long *outlen)
 {
-	int bridged = 0;
 	const u8 *s = (const u8 *)src;
 	char *out = malloc(n * 3 + 1), *p = out;
 	long i = 0;
 	if (!out)
 		return 0;
-	if (cs == CS_ATARI_VISUAL) {
-		cs = CS_ATARI;
-		bridged = cs_bridge_visual;
-	} else if (cs != CS_ATARI && looks_atari_hebrew(s, n, cs)) {
-		cs = CS_ATARI;
-		bridged = cs_bridge_visual;
-	}
 	if (cs == CS_ATARI) {
 		memcpy(out, src, n);
 		p = out + n;
@@ -348,8 +212,6 @@ char *cs_to_atari(const char *src, long n, int cs, long *outlen)
 		}
 	}
 	*p = 0;
-	if (bridged)
-		to_logical(out, p - out);
 	if (outlen)
 		*outlen = p - out;
 	return out;
@@ -579,8 +441,7 @@ static long try_word(const char *s, char **raw, long *rawlen, char *cs)
 }
 
 /* Adjacent words in the same charset are joined before converting: a
- * UTF-8 letter may be split between two of them, and a bridge's Hebrew
- * line in display order must be turned around as a whole. */
+ * UTF-8 letter may be split between two of them. */
 typedef struct {
 	char *buf;
 	long len;

@@ -232,7 +232,7 @@ void dlg_about(void)
 			ch = sch;
 		}
 		step = big ? ch + 3 : lh;
-		center(y, "After Troll by Rajah Lone. Parts from Claude ST.", 0);
+		center(y, "Parts from Claude ST.", 0);
 		y += step;
 		center(y, "Atari is a trademark of Atari Interactive.", 0);
 		if (big) {

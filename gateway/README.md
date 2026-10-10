@@ -61,19 +61,15 @@ Options > Accounts, with the Pi's address (the script prints it):
 Use the Pi's IP address: plain TOS with STinG can't always resolve names
 on the local network.
 
-## Next to another bridge
+## Next to the Troll proxy
 
 EMail converts mail to the Atari character set itself, Hebrew included, so
-it only needs a plain TLS tunnel. It also works through the Falcon mail
-proxy made for Troll (`falcon_imap_logproxy.py` in
-[whomper/atari_web](https://github.com/whomper/atari_web), `--hebrew-mode
-glyph`): EMail recognises its `x-atari-st` text and puts the Hebrew back
-into reading order. That proxy rewrites messages for Troll, though: it
-drops HTML, wraps Hebrew at 60 columns and, for IMAP only, changes what a
-forwarded message carries, so for EMail this plain tunnel is the better
-choice. The two run side by side: this gateway on the standard ports
-(143, 587, 110), the Troll proxy on others (e.g. 1143). To give this
-gateway other ports instead:
+it only needs a plain TLS tunnel: this gateway. Troll has its own proxy
+(`falcon_imap_logproxy.py` in
+[whomper/atari_web](https://github.com/whomper/atari_web)), which rewrites
+messages for Troll; EMail doesn't use it. The two run side by side: this
+gateway on the standard ports (143, 587, 110), the Troll proxy on its own
+(1143). To give this gateway other ports instead:
 
 ```
 sudo ./install.sh --ports 1143,1025,1110 imap.mail.me.com smtp.mail.me.com:587

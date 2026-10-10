@@ -607,8 +607,8 @@ int dlg_account(ACCOUNT *a)
  * crossed when on, clicked on the box or its words) and framed fields. */
 
 static char s_tz[6], s_check[4], s_page[5], s_wrap[3];
-static short s_on[6];			/* keep, log, hebrew, bridge, falcon, dsp */
-enum { T_KEEP, T_LOG, T_HEB, T_BRIDGE, T_FALCON, T_DSP };
+static short s_on[5];			/* keep, log, hebrew, falcon, dsp */
+enum { T_KEEP, T_LOG, T_HEB, T_FALCON, T_DSP };
 
 #define NTICK 8
 static short tick_box[NTICK], tick_lbl[NTICK], tick_var[NTICK], nticks;
@@ -787,7 +787,6 @@ static void settings_begin(short w, short h)
 	s_on[T_KEEP] = opt.keepcache;
 	s_on[T_LOG] = opt.log;
 	s_on[T_HEB] = opt.hebrew;
-	s_on[T_BRIDGE] = cs_bridge_visual;
 	s_on[T_FALCON] = dlg_falcon;
 	s_on[T_DSP] = opt.dsp;
 }
@@ -813,7 +812,6 @@ static void part_writing(short x, short y)
 	d_add(G_STRING, 0, 0, (long)"Wrap my lines at column", x, ROW(0), 23, 1);
 	d_field(x + FX, ROW(0), s_wrap, 2, '9');
 	d_tick(x, ROW(1), "Start with the Hebrew keyboard", T_HEB);
-	d_tick(x, ROW(2), "Hebrew from a Troll bridge is reversed", T_BRIDGE);
 }
 
 static void part_connection(short x, short y)
@@ -887,7 +885,6 @@ int dlg_settings(void)
 	opt.keepcache = s_on[T_KEEP];
 	opt.log = s_on[T_LOG];
 	opt.hebrew = s_on[T_HEB];
-	cs_bridge_visual = s_on[T_BRIDGE];
 	dlg_falcon = s_on[T_FALCON];
 	opt.dsp = s_on[T_DSP];
 	return 1;

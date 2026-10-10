@@ -225,12 +225,6 @@ Israeli keyboard. Press F10 again for Latin letters. In a Hebrew line the
 Left arrow moves forward, as on Hebrew systems. Messages go out in UTF-8,
 which every modern program reads.
 
-Mail that comes through a bridge made for older programs such as Troll
-(which turns Hebrew into Atari characters on the Pi, and each line
-around, because Troll can't lay Hebrew out itself) is recognised and put
-back into reading order. If such Hebrew shows with its words in the
-wrong order, switch "Bridge sends Hebrew reversed" in Options > Settings.
-
 The Atari font has the 27 Hebrew letters but no vowel points (niqqud),
 so those are left out when showing a message.
 

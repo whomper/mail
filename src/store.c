@@ -300,7 +300,6 @@ static void set_opt(const char *k, const char *v)
 	else if (!strcmp(k, "font")) shorts(v, &opt.font_id, 2);
 	else if (!strcmp(k, "falcon")) opt.falcon = n != 0;
 	else if (!strcmp(k, "dsp")) opt.dsp = n != 0;
-	else if (!strcmp(k, "bridgeorder")) cs_bridge_visual = n != 0;
 	else if (!strcmp(k, "hebfont")) opt.hebfont = n >= 0 && n <= 2 ? n : 0;
 }
 
@@ -449,8 +448,6 @@ int store_save_settings(void)
 		"FALCON", "%d", opt.falcon);
 	put_fmt(&b, "Falcon mode: 1 = the DSP checks the servers' signatures, 0 = the 68030 does",
 		"DSP", "%d", opt.dsp);
-	put_fmt(&b, "1 = Hebrew from a Troll bridge arrives in display order: turn it into reading order",
-		"BRIDGEORDER", "%d", cs_bridge_visual);
 	for (i = 0; i < naccts; i++) {
 		ACCOUNT *a = accts[i];
 		sb_adds(&b, "; one [ACCOUNT] part per account, up to 8; Options > Accounts edits them\r\n"
@@ -771,10 +768,9 @@ void fold_count(FOLDER *f)
 	}
 }
 
-/* Index files before version 3 hold headers that EMail 0.2 misread when
- * a bridge had already turned them into Atari text. Read them again from
- * the messages on disk; IMAP headers without one are dropped, and the
- * next sync fetches them again from the server. */
+/* Index files before version 3 hold headers an early EMail decoded
+ * wrongly. Read them again from the messages on disk; IMAP headers
+ * without one are dropped, and the next sync fetches them again. */
 static void upgrade_headers(FOLDER *f)
 {
 	long i;

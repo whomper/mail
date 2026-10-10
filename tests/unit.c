@@ -49,34 +49,12 @@ static void t_charset(void)
 	free(s);
 
 	/* Latin-1 accents map to the ST font; curly quotes become ASCII */
-	/* already Atari text, as a Troll-era bridge sends it, still labelled
-	   UTF-8; first as if in reading order (bridgeorder=0) */
-	cs_bridge_visual = 0;
-	s = cs_to_atari("\xD6\xCD\xC7\xDA caf\x82", 9, CS_UTF8, &n);
-	CHECK(n == 9 && !memcmp(s, "\xD6\xCD\xC7\xDA caf\x82", 9), "atari text labelled utf-8");
-	free(s);
-	s = cs_to_atari("\xD6\xCD\xC7\xDA", 4, CS_LATIN1, &n);
-	CHECK(n == 4 && !memcmp(s, shalom_atari, 4), "atari text labelled latin-1");
-	free(s);
-	/* in display order, as the bridge sends it for Troll: turned back */
-	cs_bridge_visual = 1;
-	s = cs_to_atari("\xDA\xC7\xCD\xD6 Dana", 9, CS_UTF8, &n);
-	CHECK(n == 9 && !memcmp(s, "Dana \xD6\xCD\xC7\xDA", 9), "bridge display order -> reading order");
-	free(s);
-	/* the Falcon mail proxy (whomper/atari_web): subject in "x" Q words
-	   of 14 bytes, display order; "Re:" makes it left to right */
+	/* a UTF-8 letter split between two encoded words */
 	{
-		char *d = hdr_decode("=?x?Q?Re:_=DA=C7=CD=D6_=C6?= =?x?Q?=CF=C5?=");
-		CHECK(d && !strcmp(d, "Re: \xC5\xCF\xC6 \xD6\xCD\xC7\xDA"), "proxy subject: %s", d ? d : "");
-		free(d);
-		/* a UTF-8 letter split between two words */
-		d = hdr_decode("=?UTF-8?B?1w==?= =?UTF-8?B?qQ==?=");
+		char *d = hdr_decode("=?UTF-8?B?1w==?= =?UTF-8?B?qQ==?=");
 		CHECK(d && !strcmp(d, "\xD6"), "utf-8 letter split across words");
 		free(d);
 	}
-	s = cs_to_atari(".\xDA\xC7\xCD\xD6", 5, CS_ATARI_VISUAL, &n);
-	CHECK(n == 5 && !memcmp(s, "\xD6\xCD\xC7\xDA.", 5), "x-atari-st body");
-	free(s);
 	/* real Latin-1 capitals stay Latin-1 */
 	s = cs_to_atari("\xC7" "a a \xE9t\xE9 \xC9\xC9", 11, CS_LATIN1, &n);
 	CHECK(n == 11 && (unsigned char)s[0] == 0x80 && (unsigned char)s[10] == 0x90, "latin-1 kept");
