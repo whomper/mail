@@ -16,6 +16,7 @@
 #include "util.h"
 #include "plat.h"
 #include "tls.h"
+#include "secret.h"
 
 static int fails, checks;
 
@@ -269,6 +270,12 @@ static void t_num(void)
 	CHECK(!strcmp(num(-45210), "-45,210"), "-45,210: %s", num(-45210));
 }
 
+static void forget_accounts(void)
+{
+	while (naccts)
+		free(accts[--naccts]);
+}
+
 /* MAIL.INF: names in capitals, a note, the setting and an empty line;
    read back the same, a password with " ;" and a two-line signature too */
 static void t_inf(void)
@@ -291,7 +298,7 @@ static void t_inf(void)
 	inf = pf_load(path, &len);
 	CHECK(inf && strstr(inf, "\r\n[OPTIONS]\r\n") && strstr(inf, "\r\n[ACCOUNT]\r\n"), "sections in capitals");
 	CHECK(inf && strstr(inf, "; your time zone") && strstr(inf, "\r\nTZ=180\r\n\r\n; "), "note, TZ=, empty line");
-	CHECK(inf && strstr(inf, "\r\nPASS=x ;y\r\n\r\n"), "PASS written");
+	CHECK(inf && strstr(inf, "\r\nPASS={E}") && !strstr(inf, "x ;y"), "PASS written encrypted");
 	CHECK(inf && strstr(inf, "\r\nSIGNATURE=Dana\\nTel Aviv\r\n"), "SIGNATURE written");
 	/* every setting line: a note above, an empty line below */
 	for (p = inf; p && (p = strstr(p, "\r\n")); p += 2) {
@@ -301,10 +308,34 @@ static void t_inf(void)
 				blank_after = 0;
 	}
 	CHECK(blank_after, "an empty line after every setting");
+	forget_accounts();		/* store_init adds to what is loaded */
 	store_init(dir);
 	a = accts[0];
 	CHECK(!strcmp(a->pass, "x ;y") && !strcmp(a->signature, "Dana\nTel Aviv") && opt.tz == 180,
 	      "read back from the new MAIL.INF");
+	CHECK(!store_lost_passwords, "MAIL.KEY opens them");
+	/* another key: the password is gone, and MAIL says so */
+	{
+		char kf[120];
+		snprintf(kf, sizeof(kf), "%s/MAIL.KEY", dir);
+		unlink(kf);
+		forget_accounts();
+		store_init(dir);
+		CHECK(store_lost_passwords && !accts[0]->pass[0], "a new MAIL.KEY can't open the old passwords");
+		unlink(kf);
+	}
+	{
+		char enc[300], dec[100];
+		secret_init("/tmp/mail-unit-key");
+		secret_encode("app-pass-1234", enc, sizeof(enc));
+		CHECK(!strncmp(enc, "{E}", 3) && secret_decode(enc, dec, sizeof(dec)) && !strcmp(dec, "app-pass-1234"),
+		      "encrypt and decrypt: %s", enc);
+		secret_encode("app-pass-1234", dec, sizeof(dec));
+		CHECK(strcmp(enc, dec), "a new nonce each time");
+		CHECK(secret_decode("plain", dec, sizeof(dec)) && !strcmp(dec, "plain"), "plain value read as it is");
+		unlink("/tmp/mail-unit-key");
+	}
+	forget_accounts();
 	free(inf);
 	unlink(path);
 	rmdir(dir);

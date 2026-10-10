@@ -119,6 +119,10 @@ extern short naccts;
 /* settings */
 int  store_init(const char *workdir);	/* loads MAIL.INF (creates dirs) */
 int  store_save_settings(void);
+/* MAIL.INF had passwords that MAIL.KEY can't open (a lost or new key):
+   they are empty and must be typed again */
+extern int store_lost_passwords;
+extern int store_plain_passwords;	/* MAIL.INF still has some as typed */
 ACCOUNT *acct_new(void);
 /* the servers in use: the gateway's (plain), or in Falcon mode the
    provider's (TLS). smtp: 0 incoming, 1 outgoing */

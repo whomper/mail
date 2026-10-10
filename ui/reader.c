@@ -38,9 +38,12 @@ static void free_layout(void)
 	w_reader.total = 0;
 }
 
+static long selection;		/* several messages selected: how many */
+
 void reader_clear(void)
 {
 	reader_missing = 0;
+	selection = 0;
 	free_layout();
 	mime_free(cur_msg);
 	cur_msg = 0;
@@ -142,6 +145,18 @@ static char *expand_tabs(const char *s, long n, long *outlen)
 }
 
 int reader_missing;
+
+void reader_selection(long n)
+{
+	reader_clear();
+	selection = n;
+	{
+		char t[40];
+		snprintf(t, sizeof(t), "%s messages", num(n));
+		win_title(&w_reader, t);
+	}
+	win_redraw(&w_reader, 0);
+}
 
 static char *dup0(const char *s)
 {
@@ -256,6 +271,20 @@ static void draw(WIN *w, GRECT *clip)
 	long i, rows = win_rows(w) + 1;
 	short cols = w->work.w / cw - 1, x0 = w->work.x + cw / 2;
 	fill(clip, 0);
+	if (!cur_msg && selection > 1) {
+		static const char *how[] = {
+			"Message menu, right-click or keys for all of them:",
+			"^U unread  ^G flag  ^M move  Del delete",
+			"A click without Shift or Control selects one again."
+		};
+		char t[60];
+		short k;
+		snprintf(t, sizeof(t), "%s messages selected.", num(selection));
+		text_at(x0, w->work.y + ch, t, strlen(t), cols, TX_BOLD);
+		for (k = 0; k < 3; k++)
+			text_at(x0, w->work.y + (3 + k) * ch, how[k], strlen(how[k]), cols, 0);
+		return;
+	}
 	if (!cur_msg) {
 		text_at(x0, w->work.y + ch, "No message selected.", 20, cols, TX_LIGHT);
 		return;

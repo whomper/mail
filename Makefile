@@ -34,7 +34,7 @@ BSSLCF  := -m68030 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic
 BSSLOBJ  = $(patsubst $(BSSL)/src/%.c,$(OBJDIR)/bssl/%.o,$(BSSLSRC))
 HBSSLOBJ = $(patsubst $(BSSL)/src/%.c,$(OBJDIR)/hbssl/%.o,$(BSSLSRC))
 
-CORE    := util charset mime conn tls imap pop3 smtp store compose mail futil bidi
+CORE    := util charset mime conn tls imap pop3 smtp store compose mail futil bidi secret
 ATARI   := libc tos plat_tos net_tos sting gem dsprsa
 UI      := main draw win folders list reader editor dialogs popup font about dsp
 

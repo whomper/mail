@@ -27,7 +27,8 @@ keeps everything next to itself:
 
 ```
 C:\MAIL\MAIL.PRG      the program
-C:\MAIL\MAIL.INF      settings and accounts (each line has a note above it)
+C:\MAIL\MAIL.INF      settings and accounts (each setting has a note above it)
+C:\MAIL\MAIL.KEY      the key the passwords in MAIL.INF are encrypted with
 C:\MAIL\ADDRESS.TXT   address book
 C:\MAIL\MAIL.LOG      protocol log, when switched on
 C:\MAIL\CACERT.PEM    root certificates, for Falcon mode only
@@ -55,8 +56,11 @@ Options > Accounts > New, or the dialog MAIL shows at first start:
 | Signature      | two lines, added below new messages (a `|` in line 2 starts a third) |
 
 MAIL holds up to eight accounts. Edit or delete one with Options >
-Accounts > Edit. Passwords are kept in `MAIL.INF` as typed, so keep that
-file to yourself.
+Accounts > Edit. Passwords are kept in `MAIL.INF` encrypted with a random
+key MAIL makes the first time, in `MAIL.KEY`: someone who reads or copies
+MAIL.INF alone can't read them, but whoever has both files can, so keep
+MAIL.KEY to yourself. Lose MAIL.KEY (or start with a new one) and MAIL asks
+you to type the passwords again.
 
 ## Falcon mode
 
@@ -243,6 +247,19 @@ so those are left out when showing a message.
 | F10          | Hebrew keyboard on/off     | Help         | these keys              |
 | Esc          | close the editor           | Ctrl+Q       | quit                    |
 | Tab          | next pane                  | Right button | what you can do there   |
+| Ctrl+A       | select all messages        | Shift+click  | add/remove one message  |
+| Control+click| select a range             |              |                         |
+
+**Several messages at once.** Shift+click adds a message to the selection
+(or takes it out), Control+click selects everything from the last message
+you clicked, and Ctrl+A (Message > Select all) the whole list. The message
+pane then says how many are selected; Mark as read, Mark as unread, Flag,
+Move to and Delete (from the Message menu, the keys or a right-click on the
+selection) work on all of them. A plain click selects one message again.
+
+**Move to** shows the folders in alphabetical order, a subfolder with its
+parent ("Archive / 2023"); the arrows page through a long list, a click
+picks a folder and OK (or a double click) moves the messages there.
 
 ## How your mail is kept
 

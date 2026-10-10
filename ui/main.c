@@ -48,8 +48,10 @@ static const MITEM m_file[] = {
 static const MITEM m_msg[] = {
 	{ "  Reply            ^R ", C_REPLY }, { "  Reply to all     ^E ", C_REPLYALL },
 	{ "  Forward          ^F ", C_FORWARD }, { "----------------------", C_SEP },
-	{ "  Mark as unread   ^U ", C_UNREAD }, { "  Flag             ^G ", C_FLAG },
+	{ "  Mark as read         ", C_MARKREAD }, { "  Mark as unread   ^U ", C_UNREAD },
+	{ "  Flag             ^G ", C_FLAG },
 	{ "  Move to...       ^M ", C_MOVE }, { "  Delete          Del ", C_DELETE },
+	{ "  Select all       ^A ", C_SELALL },
 	{ "----------------------", C_SEP },
 	{ "  Send now         ^S ", C_SEND }, { "  Put in Outbox       ", C_SAVEOUT },
 	{ "  Attach file...   ^T ", C_ATTACH }, { "  Address book...  ^B ", C_ABOOK }, { 0, 0 }
@@ -180,13 +182,16 @@ static void enable(short cmd, int on)
 void menu_update(void)
 {
 	int msg = cur_msg != 0, ed = w_editor.h > 0;
+	int some = msg || list_marked() > 1;	/* one message or a selection */
 	enable(C_REPLY, msg);
 	enable(C_REPLYALL, msg);
 	enable(C_FORWARD, msg);
-	enable(C_UNREAD, msg);
-	enable(C_FLAG, msg);
-	enable(C_MOVE, msg);
-	enable(C_DELETE, msg);
+	enable(C_MARKREAD, some);
+	enable(C_UNREAD, some);
+	enable(C_FLAG, some);
+	enable(C_MOVE, some);
+	enable(C_DELETE, some);
+	enable(C_SELALL, cur_folder != 0);
 	enable(C_SAVEATT, msg && cur_msg->nparts > 0);
 	enable(C_SEND, ed);
 	enable(C_SAVEOUT, ed);
@@ -353,64 +358,126 @@ static void cmd_reply(int all, int forward)
 	editor_open(a, text, cur_msg->message_id, refs);
 }
 
+/* Delete, Move and the marks work on the selected messages, or the
+   current one. Their UIDs are taken first: the list changes as they go. */
+static void bulk_status(const char *what, long k, long n)
+{
+	char t[80];
+	if (n > 1) {
+		snprintf(t, sizeof(t), "%s %s of %s...", what, num(k + 1), num(n));
+		status(t);
+	}
+}
+
 static void cmd_delete(void)
 {
-	HDR *h;
-	if (!cur_folder || !(h = fold_get(cur_folder, cur_uid)))
+	unsigned long *u;
+	long n, k, done = 0;
+	if (!cur_folder || !(u = list_targets(&n)))
 		return;
-	if (cur_finfo->role == FR_TRASH &&
-	    alert(2, "[2][Delete this message|for good?][Delete|Cancel]") != 1)
-		return;
+	if (cur_finfo->role == FR_TRASH || n > 1) {
+		short b = cur_finfo->role == FR_TRASH
+			? (n > 1 ? alert(2, "[2][Delete these %s messages|for good?][Delete|Cancel]", num(n))
+				 : alert(2, "[2][Delete this message|for good?][Delete|Cancel]"))
+			: alert(2, "[2][Delete these %s messages?][Delete|Cancel]", num(n));
+		if (b != 1) {
+			free(u);
+			return;
+		}
+	}
 	busy(1);
 	mail_err[0] = 0;
-	if (!mail_delete(cur_folder, h)) {
-		busy(0);
-		alert(1, "[1][%s][ OK ]", mail_err);
-		return;
+	for (k = 0; k < n; k++) {
+		HDR *h = fold_get(cur_folder, u[k]);
+		bulk_status("Deleting", k, n);
+		if (!h)
+			continue;
+		if (!mail_delete(cur_folder, h))
+			break;
+		done++;
 	}
 	busy(0);
+	free(u);
+	status("");
+	if (k < n)
+		alert(1, "[1][%s][ OK ]", mail_err[0] ? mail_err : "Can't delete the message.");
+	list_unmark();
 	reader_clear();
-	list_after_remove();
+	if (done)
+		list_after_remove();
 	menu_update();
 }
 
 static void cmd_move(void)
 {
-	HDR *h;
+	unsigned long *u;
+	long n, k, done = 0;
 	FINFO *dest;
-	char server[160];
-	if (!cur_folder || !(h = fold_get(cur_folder, cur_uid)))
+	char title[60];
+	if (!cur_folder || !(u = list_targets(&n)))
 		return;
-	dest = dlg_pick_folder(cur_acct, "Move the message to");
-	if (!dest)
-		return;
-	str_copy(server, dest->server, sizeof(server));
-	busy(1);
-	mail_err[0] = 0;
-	if (!mail_move(cur_folder, h, dest)) {
-		busy(0);
-		alert(1, "[1][%s][ OK ]", mail_err);
+	if (n > 1)
+		snprintf(title, sizeof(title), "Move %s messages to", num(n));
+	else
+		str_copy(title, "Move the message to", sizeof(title));
+	dest = dlg_pick_folder(cur_acct, title);
+	if (!dest) {
+		free(u);
 		return;
 	}
+	busy(1);
+	mail_err[0] = 0;
+	for (k = 0; k < n; k++) {
+		HDR *h = fold_get(cur_folder, u[k]);
+		bulk_status("Moving", k, n);
+		if (!h)
+			continue;
+		if (!mail_move(cur_folder, h, dest))
+			break;
+		done++;
+	}
 	busy(0);
+	free(u);
+	status("");
+	if (k < n)
+		alert(1, "[1][%s][ OK ]", mail_err[0] ? mail_err : "Can't move the message.");
+	list_unmark();
 	reader_clear();
-	list_after_remove();
+	if (done)
+		list_after_remove();
 	menu_update();
 }
 
+/* read/unread, or the flag: for several messages the flag goes on all of
+   them unless they all have it already, then off */
 static void cmd_flag(unsigned short flag, int add)
 {
-	HDR *h;
-	if (!cur_folder || !(h = fold_get(cur_folder, cur_uid)))
+	unsigned long *u;
+	long n, k;
+	int several;
+	if (!cur_folder || !(u = list_targets(&n)))
 		return;
-	if (flag == MF_FLAGGED)
-		add = !(h->flags & MF_FLAGGED);
-	busy(1);
+	several = n > 1;
+	if (flag == MF_FLAGGED) {
+		add = 0;
+		for (k = 0; k < n; k++) {
+			HDR *h = fold_get(cur_folder, u[k]);
+			if (h && !(h->flags & MF_FLAGGED))
+				add = 1;
+		}
+	}
 	mail_err[0] = 0;
-	if (!mail_flag(cur_folder, h, flag, add))
+	for (k = 0; k < n; k++) {
+		HDR *h = fold_get(cur_folder, u[k]);
+		if (h && !mail_flag(cur_folder, h, flag, add))
+			break;
+	}
+	free(u);
+	if (k < n)
 		alert(1, "[1][%s][ OK ]", mail_err);
-	busy(0);
 	list_refresh();
+	if (several)
+		list_titles();
 	folders_build();
 }
 
@@ -651,6 +718,7 @@ static void command(short cmd)
 	case C_FLAG: cmd_flag(MF_FLAGGED, 1); break;
 	case C_MOVE: cmd_move(); break;
 	case C_DELETE: cmd_delete(); break;
+	case C_SELALL: list_select_all(); break;
 	case C_SEND: editor_send(1); break;
 	case C_SAVEOUT: editor_send(0); break;
 	case C_ATTACH: editor_attach(); break;
@@ -762,8 +830,7 @@ static int shortcut(short kstate, short key)
 		return 1;
 	}
 	if (scan == 0x62) {		/* Help */
-		alert(1, "[1][^N new  ^K check mail  ^R reply|^E reply all  ^F forward  ^U unread|"
-			 "^G flag  ^M move  Del delete|^S send  ^T attach  ^B addresses|F10 Hebrew keyboard  ^Q quit][ OK ]");
+		dlg_keys();
 		return 1;
 	}
 	if (kstate & K_CTRL) {
@@ -778,6 +845,7 @@ static int shortcut(short kstate, short key)
 		case 0x16: cmd = C_UNREAD; break;	/* U */
 		case 0x22: cmd = C_FLAG; break;		/* G */
 		case 0x32: cmd = C_MOVE; break;		/* M */
+		case 0x1e: cmd = C_SELALL; break;	/* A */
 		case 0x1f: cmd = C_SEND; break;		/* S */
 		case 0x14: cmd = C_ATTACH; break;	/* T */
 		case 0x30: cmd = C_ABOOK; break;	/* B */
@@ -785,9 +853,12 @@ static int shortcut(short kstate, short key)
 		if (cmd == C_SEND || cmd == C_ATTACH || cmd == C_ABOOK) {
 			if (w_editor.h <= 0)
 				return 1;
-		} else if ((cmd == C_REPLY || cmd == C_REPLYALL || cmd == C_FORWARD || cmd == C_UNREAD ||
-			    cmd == C_FLAG || cmd == C_MOVE) && !cur_msg) {
+		} else if ((cmd == C_REPLY || cmd == C_REPLYALL || cmd == C_FORWARD) && !cur_msg) {
 			return 1;
+		} else if ((cmd == C_UNREAD || cmd == C_FLAG || cmd == C_MOVE) && !cur_msg && list_marked() < 2) {
+			return 1;
+		} else if (cmd == C_SELALL && (top == &w_editor || !cur_folder)) {
+			return 0;		/* the editor may want ^A */
 		}
 		if (cmd != C_NONE) {
 			command(cmd);
@@ -800,7 +871,7 @@ static int shortcut(short kstate, short key)
 		return 1;
 	}
 	/* Delete removes the message unless the editor has the keyboard */
-	if (scan == 0x53 && top != &w_editor && cur_msg) {
+	if (scan == 0x53 && top != &w_editor && (cur_msg || list_marked() > 1)) {
 		command(C_DELETE);
 		return 1;
 	}
@@ -859,6 +930,8 @@ int main(void)
 
 	work_dir(dir, sizeof(dir));
 	store_init(dir);
+	if (store_plain_passwords && !store_lost_passwords)
+		store_save_settings();		/* encrypt them right away */
 	falcon_dsp_init();
 	font_apply();
 	hebrew_kbd = opt.hebrew;
@@ -891,6 +964,8 @@ int main(void)
 	} else {
 		/* check mail at start, then open the first inbox */
 		FINFO *in;
+		if (store_lost_passwords)
+			alert(1, "[1][MAIL.KEY is missing or new: type the passwords again in Options > Accounts.][ OK ]");
 		if (!opt.offline)
 			cmd_check_all();
 		in = folder_role(accts[0], FR_INBOX);

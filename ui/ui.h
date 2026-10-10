@@ -95,6 +95,12 @@ void list_load(void);			/* (re)read cur_folder into the list */
 void list_refresh(void);
 void list_titles(void);
 HDR *list_current(void);
+/* several messages selected */
+long list_marked(void);				/* how many (0: just the current one) */
+unsigned long *list_targets(long *n);	/* their UIDs, malloc'ed; or the current one */
+void list_unmark(void);
+void list_select_all(void);
+void reader_selection(long n);			/* the reader says how many are selected */
 void list_select_uid(unsigned long uid);
 void list_after_remove(void);
 
@@ -130,12 +136,13 @@ short  d_check(short x, short y, const char *s, short on);
 void   d_end(void);
 OBJECT *d_tree(void);
 short alert(short def, const char *fmt, ...);
+void dlg_keys(void);			/* Help: the keys */
 
 /* menu commands (main.c) */
 enum {
 	C_NONE, C_ABOUT,
 	C_NEW, C_CHECK, C_SENDQ, C_SAVEATT, C_QUIT,
-	C_REPLY, C_REPLYALL, C_FORWARD, C_UNREAD, C_MARKREAD, C_FLAG, C_MOVE, C_DELETE,
+	C_REPLY, C_REPLYALL, C_FORWARD, C_UNREAD, C_MARKREAD, C_FLAG, C_MOVE, C_DELETE, C_SELALL,
 	C_SEND, C_SAVEOUT, C_ATTACH, C_ABOOK,
 	C_FOLDERS, C_REFRESH, C_NEWFOLDER, C_DELFOLDER,
 	C_ACCOUNTS, C_SETTINGS, C_FONT, C_OFFLINE, C_FALCON, C_HEBREW, C_LOG,

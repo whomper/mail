@@ -17,6 +17,80 @@ static long shown;		/* local folders: how many of the newest to list */
 static long more;		/* older messages not listed yet (0: no "load more" row) */
 static unsigned long sel_uid;
 
+/* more than one message selected (Shift+click, Control+click, ^A): their
+   UIDs. Empty: the one current message (sel) is the selection. */
+static unsigned long *marks;
+static long nmarks, capmarks;
+static long anchor = -1;	/* where a Control+click range starts */
+
+static long mark_find(unsigned long uid)
+{
+	long i;
+	for (i = 0; i < nmarks; i++)
+		if (marks[i] == uid)
+			return i;
+	return -1;
+}
+
+static int marked(long row)
+{
+	return nmarks && row >= 0 && row < nview && mark_find(cur_folder->h[view[row]].uid) >= 0;
+}
+
+static void mark_set(long row, int on)
+{
+	unsigned long uid;
+	long k;
+	if (row < 0 || row >= nview)
+		return;
+	uid = cur_folder->h[view[row]].uid;
+	k = mark_find(uid);
+	if (on && k < 0) {
+		if (nmarks == capmarks) {
+			long cap = capmarks ? capmarks * 2 : 64;
+			unsigned long *n = realloc(marks, cap * sizeof(*marks));
+			if (!n)
+				return;
+			marks = n;
+			capmarks = cap;
+		}
+		marks[nmarks++] = uid;
+	} else if (!on && k >= 0) {
+		marks[k] = marks[--nmarks];
+	}
+}
+
+void list_unmark(void)
+{
+	nmarks = 0;
+}
+
+long list_marked(void)
+{
+	return nmarks;
+}
+
+/* the messages a command works on: the selected ones, or the current
+   one. A copy of their UIDs (the list changes as they move), or NULL */
+unsigned long *list_targets(long *n)
+{
+	unsigned long *u;
+	HDR *h = list_current();
+	*n = nmarks ? nmarks : h ? 1 : 0;
+	if (!*n)
+		return 0;
+	u = malloc(*n * sizeof(*u));
+	if (!u) {
+		*n = 0;
+		return 0;
+	}
+	if (nmarks)
+		memcpy(u, marks, nmarks * sizeof(*u));
+	else
+		u[0] = h->uid;
+	return u;
+}
+
 static int cmp_date(const void *x, const void *y)
 {
 	HDR *a = &cur_folder->h[*(const long *)x], *b = &cur_folder->h[*(const long *)y];
@@ -41,7 +115,9 @@ void list_titles(void)
 	}
 	snprintf(t, sizeof(t), "%s - %s", cur_finfo->disp, cur_acct->name);
 	win_title(&w_list, t);
-	if (opt.offline)
+	if (nmarks > 1)
+		snprintf(i, sizeof(i), "%s selected", num(nmarks));
+	else if (opt.offline)
 		snprintf(i, sizeof(i), "%s unread  (offline)", num(cur_finfo->unread));
 	else if (cur_acct->cut && !cur_finfo->local)
 		snprintf(i, sizeof(i), "%s unread  (not connected: Check mail tries again)", num(cur_finfo->unread));
@@ -74,8 +150,15 @@ void list_refresh(void)
 					sel = i;
 		}
 	}
-	if (cur_folder)
+	if (cur_folder) {
+		long k;
 		fold_count(cur_folder);
+		for (k = nmarks - 1; k >= 0; k--)
+			if (!fold_get(cur_folder, marks[k]))
+				marks[k] = marks[--nmarks];
+	} else {
+		nmarks = 0;
+	}
 	more = 0;
 	if (cur_folder && cur_finfo->local)
 		more = cur_folder->n - nview;
@@ -96,6 +179,8 @@ void list_refresh(void)
 void list_load(void)
 {
 	sel_uid = 0;
+	nmarks = 0;
+	anchor = -1;
 	shown = opt.page;
 	w_list.top = 0;
 	list_refresh();
@@ -215,11 +300,12 @@ static void draw(WIN *w, GRECT *clip)
 	for (i = w->top; i < nview && i < w->top + rows; i++) {
 		HDR *h = &cur_folder->h[view[i]];
 		short y = w->work.y + w->head_h + (short)((i - w->top) * ch);
-		short fl = (i == sel) ? TX_INVERSE : 0;
+		int lit = nmarks ? marked(i) : i == sel;
+		short fl = lit ? TX_INVERSE : 0;
 		char marks[4], date[24], size[8];
 		const char *who = show_to() ? h->to : h->from;
 		char name[64];
-		if (i == sel) {
+		if (lit) {
 			r.x = w->work.x;
 			r.y = y;
 			r.w = w->work.w;
@@ -288,6 +374,11 @@ static void select_row(long i, int open)
 	}
 	if (i < 0 || i >= nview)
 		return;
+	if (nmarks) {
+		nmarks = 0;
+		win_redraw(&w_list, 0);
+	}
+	anchor = i;
 	sel = i;
 	sel_uid = cur_folder->h[view[i]].uid;
 	win_redraw_lines(&w_list, old, 1);
@@ -302,16 +393,68 @@ static void select_row(long i, int open)
 		win_focus(&w_reader);
 }
 
+/* Shift+click: this one in or out of the selection; Control+click: all
+   from the last clicked one to this one */
+static void mark_click(long i, short kstate)
+{
+	long a, b, k;
+	if (i < 0 || i >= nview)
+		return;
+	if (!nmarks && sel >= 0 && sel < nview)
+		mark_set(sel, 1);		/* the message shown so far comes along */
+	if ((kstate & K_CTRL) && anchor >= 0 && anchor < nview) {
+		a = anchor < i ? anchor : i;
+		b = anchor < i ? i : anchor;
+		for (k = a; k <= b; k++)
+			mark_set(k, 1);
+	} else {
+		mark_set(i, !marked(i));
+		anchor = i;
+	}
+	sel = i;
+	sel_uid = cur_folder->h[view[i]].uid;
+	if (nmarks == 1) {
+		/* back to one: show it */
+		long only = 0;
+		for (k = 0; k < nview; k++)
+			if (marked(k))
+				only = k;
+		nmarks = 0;
+		select_row(only, 0);
+		return;
+	}
+	reader_selection(nmarks);
+	win_redraw(&w_list, 0);
+	list_titles();
+	menu_update();
+}
+
+void list_select_all(void)
+{
+	long k;
+	if (!cur_folder || nview < 2)
+		return;
+	for (k = 0; k < nview; k++)
+		mark_set(k, 1);
+	reader_selection(nmarks);
+	win_redraw(&w_list, 0);
+	list_titles();
+	menu_update();
+}
+
 static void click(WIN *w, short mx, short my, short clicks, short kstate)
 {
 	long i;
 	(void)mx;
-	(void)kstate;
 	if (my < w->work.y + w->head_h)
 		return;
 	i = w->top + (my - w->work.y - w->head_h) / ch;
 	if (i == nview && more) {
 		load_more();
+		return;
+	}
+	if (kstate & (K_LSHIFT | K_RSHIFT | K_CTRL)) {
+		mark_click(i, kstate);
 		return;
 	}
 	select_row(i, clicks > 1);
@@ -323,6 +466,16 @@ void message_menu(short mx, short my, int with_open)
 	HDR *h = cur_folder ? fold_get(cur_folder, cur_uid) : 0;
 	const char *lab[10];
 	short cmd[10], n = 0, r;
+	if (nmarks > 1) {
+		/* for all the selected messages */
+		static const char *blab[] = { "Mark as read", "Mark as unread   ^U", "Flag / unflag    ^G",
+					      "-", "Move to...       ^M", "-", "Delete          Del" };
+		static const short bcmd[] = { C_MARKREAD, C_UNREAD, C_FLAG, 0, C_MOVE, 0, C_DELETE };
+		r = popup(mx, my, blab, 7);
+		if (r >= 0 && bcmd[r])
+			ui_command(bcmd[r]);
+		return;
+	}
 	if (!h || !cur_msg)
 		return;
 	if (with_open) {
@@ -364,6 +517,10 @@ static void rclick(WIN *w, short mx, short my)
 	i = w->top + (my - w->work.y - w->head_h) / ch;
 	if (i < 0 || i >= nview)
 		return;
+	if (nmarks && marked(i)) {
+		message_menu(mx, my, 0);	/* for the whole selection */
+		return;
+	}
 	if (cur_folder->h[view[i]].uid != cur_uid || !cur_msg)
 		select_row(i, 0);
 	message_menu(mx, my, 1);

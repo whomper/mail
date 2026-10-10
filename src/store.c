@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include "plat.h"
 #include "store.h"
+#include "secret.h"
 #include "charset.h"
 #include "mime.h"
 #include "util.h"
@@ -237,6 +238,20 @@ void acct_delete(ACCOUNT *a)
 	free(a);
 }
 
+int store_lost_passwords, store_plain_passwords;
+
+/* a password from MAIL.INF: encrypted ({E}...) or, from an older MAIL,
+   as typed. One this MAIL.KEY can't open is left empty */
+static void unseal(char *field, const char *v, int size)
+{
+	if (!secret_decode(v, field, size)) {
+		field[0] = 0;
+		store_lost_passwords = 1;
+	} else if (*v && strncmp(v, SECRET_TAG, strlen(SECRET_TAG))) {
+		store_plain_passwords = 1;	/* written by an older MAIL */
+	}
+}
+
 static void set_acct(ACCOUNT *a, const char *k, const char *v)
 {
 	char tmp[256];
@@ -248,12 +263,12 @@ static void set_acct(ACCOUNT *a, const char *k, const char *v)
 	else if (!strcmp(k, "host")) str_copy(a->host, tmp, sizeof(a->host));
 	else if (!strcmp(k, "port")) a->port = (unsigned short)atoi(tmp);
 	else if (!strcmp(k, "user")) str_copy(a->user, tmp, sizeof(a->user));
-	else if (!strcmp(k, "pass")) str_copy(a->pass, tmp, sizeof(a->pass));
+	else if (!strcmp(k, "pass")) unseal(a->pass, tmp, sizeof(a->pass));
 	else if (!strcmp(k, "leave")) a->leave = (short)atoi(tmp);
 	else if (!strcmp(k, "smtphost")) str_copy(a->smtphost, tmp, sizeof(a->smtphost));
 	else if (!strcmp(k, "smtpport")) a->smtpport = (unsigned short)atoi(tmp);
 	else if (!strcmp(k, "smtpuser")) str_copy(a->smtpuser, tmp, sizeof(a->smtpuser));
-	else if (!strcmp(k, "smtppass")) str_copy(a->smtppass, tmp, sizeof(a->smtppass));
+	else if (!strcmp(k, "smtppass")) unseal(a->smtppass, tmp, sizeof(a->smtppass));
 	else if (!strcmp(k, "sent")) str_copy(a->sentname, tmp, sizeof(a->sentname));
 	else if (!strcmp(k, "signature")) str_copy(a->signature, tmp, sizeof(a->signature));
 	else if (!strcmp(k, "dhost")) str_copy(a->dhost, tmp, sizeof(a->dhost));
@@ -263,9 +278,9 @@ static void set_acct(ACCOUNT *a, const char *k, const char *v)
 	else if (!strcmp(k, "dsec")) a->dsec = (short)atoi(tmp);
 	else if (!strcmp(k, "dsmtpsec")) a->dsmtpsec = (short)atoi(tmp);
 	else if (!strcmp(k, "duser")) str_copy(a->duser, tmp, sizeof(a->duser));
-	else if (!strcmp(k, "dpass")) str_copy(a->dpass, tmp, sizeof(a->dpass));
+	else if (!strcmp(k, "dpass")) unseal(a->dpass, tmp, sizeof(a->dpass));
 	else if (!strcmp(k, "dsmtpuser")) str_copy(a->dsmtpuser, tmp, sizeof(a->dsmtpuser));
-	else if (!strcmp(k, "dsmtppass")) str_copy(a->dsmtppass, tmp, sizeof(a->dsmtppass));
+	else if (!strcmp(k, "dsmtppass")) unseal(a->dsmtppass, tmp, sizeof(a->dsmtppass));
 }
 
 static void set_opt(const char *k, const char *v)
@@ -298,6 +313,12 @@ int store_init(const char *workdir)
 	defaults();
 	str_copy(opt.workdir, workdir, sizeof(opt.workdir));
 	path_join(inf_path, sizeof(inf_path), workdir, "MAIL.INF");
+	{
+		char kf[220];
+		path_join(kf, sizeof(kf), workdir, "MAIL.KEY");
+		secret_init(kf);
+		store_lost_passwords = store_plain_passwords = 0;
+	}
 	path_join(mail_dir, sizeof(mail_dir), workdir, "MAIL");
 	pf_mkdir(mail_dir);
 	/* Falcon mode: the root certificates next to MAIL.PRG, the random
@@ -382,6 +403,14 @@ static void put_fmt(SBUF *b, const char *note, const char *key, const char *fmt,
 	sb_adds(b, "\r\n\r\n");
 }
 
+/* a password, encrypted with MAIL.KEY */
+static void put_secret(SBUF *b, const char *note, const char *key, const char *val)
+{
+	char sealed[300];
+	secret_encode(val, sealed, sizeof(sealed));
+	put_str(b, note, key, sealed);
+}
+
 int store_save_settings(void)
 {
 	SBUF b;
@@ -434,7 +463,7 @@ int store_save_settings(void)
 		put_str(&b, "incoming server through the Pi gateway: the Pi's IP address", "HOST", a->host);
 		put_fmt(&b, "its port: 143 (IMAP) or 110 (POP3) on the gateway", "PORT", "%u", a->port);
 		put_str(&b, "login for the incoming server (Pi gateway)", "USER", a->user);
-		put_str(&b, "password, as typed: keep this file to yourself", "PASS", a->pass);
+		put_secret(&b, "password, encrypted with MAIL.KEY (type it in Options > Accounts)", "PASS", a->pass);
 		put_fmt(&b, "POP3 only: 1 = leave mail on the server after downloading it",
 			"LEAVE", "%d", a->leave);
 		put_str(&b, "outgoing (SMTP) server through the Pi gateway: the Pi's IP address",
@@ -442,7 +471,7 @@ int store_save_settings(void)
 		put_fmt(&b, "its port: 587 on the gateway", "SMTPPORT", "%u", a->smtpport);
 		put_str(&b, "SMTP login: empty = same as incoming, - = the server needs no login",
 			"SMTPUSER", a->smtpuser);
-		put_str(&b, "SMTP password, if the SMTP login differs", "SMTPPASS", a->smtppass);
+		put_secret(&b, "SMTP password, if the SMTP login differs (encrypted)", "SMTPPASS", a->smtppass);
 		put_str(&b, "IMAP folder for copies of sent mail; empty = the server's Sent folder",
 			"SENT", a->sentname);
 		put_str(&b, "Falcon mode: the provider's incoming server", "DHOST", a->dhost);
@@ -454,9 +483,9 @@ int store_save_settings(void)
 		put_fmt(&b, "0 = TLS or STARTTLS by the port, 1 = always TLS, 2 = always STARTTLS",
 			"DSMTPSEC", "%d", a->dsmtpsec);
 		put_str(&b, "Falcon mode: login for the provider's incoming server", "DUSER", a->duser);
-		put_str(&b, "Falcon mode: its password (for iCloud and Gmail an app password)", "DPASS", a->dpass);
+		put_secret(&b, "Falcon mode: its password, encrypted (iCloud, Gmail: an app password)", "DPASS", a->dpass);
 		put_str(&b, "Falcon mode: SMTP login; empty = same as incoming, - = none", "DSMTPUSER", a->dsmtpuser);
-		put_str(&b, "Falcon mode: SMTP password, if the SMTP login differs", "DSMTPPASS", a->dsmtppass);
+		put_secret(&b, "Falcon mode: SMTP password, if the SMTP login differs (encrypted)", "DSMTPPASS", a->dsmtppass);
 		put_str(&b, "added below new messages; \\n starts a new line (two lines in the account dialog)",
 			"SIGNATURE", a->signature);
 	}

@@ -633,53 +633,120 @@ int dlg_ask(const char *title, const char *label, char *buf, short len)
 
 /* ---------------- pickers ---------------- */
 
-#define PAGE 14
+#define PROWS 12			/* rows shown at a time */
+#define PW 38				/* their width in characters */
 
-/* choose one of n strings (Atari charset); -1 = cancelled */
+/* choose one of n strings (Atari charset); -1 = cancelled. One dialog
+   that stays open: a framed list with arrows to page through it (the
+   list is redrawn in place), a click picks a row, OK or a double click
+   takes it. */
 static short pick(const char *title, const char **items, short n)
 {
-	static char shown[PAGE][40];
-	short first = 0;
+	static char shown[PROWS][PW + 2], count[40];
+	short first = 0, cur = -1, row[PROWS], box, b_up, b_down, b_ok, b_cancel, f_count;
+	short x, y, w, h, bx, by, r, i, result = -1;
+
+	d_begin(PW + 8, PROWS + 8);
+	d_add(G_STRING, 0, 0, (long)title, 2, 1, (short)strlen(title), 1);
+	box = d_add(G_BOX, 0, 0, 0x00FF1100L, 2, 3, PW, PROWS);
+	for (i = 0; i < PROWS; i++)
+		row[i] = d_add(G_STRING, TOUCHEXIT, 0, (long)shown[i], 2, 3 + i, PW, 1);
+	b_up = d_add(G_BOXCHAR, TOUCHEXIT, 0, 0x01FF1100L, PW + 3, 3, 2, 1);
+	b_down = d_add(G_BOXCHAR, TOUCHEXIT, 0, 0x02FF1100L, PW + 3, 2 + PROWS, 2, 1);
+	f_count = d_add(G_STRING, 0, 0, (long)count, 2, PROWS + 4, 30, 1);
+	b_cancel = d_button(PW - 18, PROWS + 6, 10, "Cancel", EXIT);
+	b_ok = d_button(PW - 6, PROWS + 6, 10, "OK", EXIT | DEFAULT);
+	d_end();
+
 	for (;;) {
-		short i, obj[PAGE], b_prev = -1, b_next = -1, b_cancel, r, k = 0;
-		short rows = n - first < PAGE ? n - first : PAGE;
-		d_begin(40, rows + 6);
-		d_add(G_STRING, 0, 0, (long)title, 2, 1, (short)strlen(title), 1);
-		for (i = first; i < n && k < PAGE; i++, k++) {
-			short len = (short)strlen(items[i]);
-			if (len > 34)
-				len = 34;
-			/* GEM draws in storage order: lay Hebrew out first */
-			if (bidi_has_rtl(items[i], len))
-				bidi_visual(items[i], len, bidi_is_rtl(items[i], len), shown[k]);
-			else
-				memcpy(shown[k], items[i], len);
-			shown[k][len] = 0;
-			heb_font_map(shown[k], len, opt.hebfont);
-			obj[k] = d_add(G_BUTTON, SELECTABLE | EXIT, 0, (long)shown[k], 3, 3 + k, 34, 1);
+		/* fill the rows from `first`; the chosen one inverted */
+		short k;
+		for (k = 0; k < PROWS; k++) {
+			short it = first + k, len = 0;
+			memset(shown[k], ' ', PW);
+			shown[k][PW] = 0;
+			tree[row[k]].ob_state = 0;
+			if (it < n) {
+				const char *s = items[it];
+				len = (short)strlen(s);
+				if (len > PW - 2)
+					len = PW - 2;
+				/* GEM draws in storage order: lay Hebrew out first */
+				if (bidi_has_rtl(s, len))
+					bidi_visual(s, len, bidi_is_rtl(s, len), shown[k] + 1);
+				else
+					memcpy(shown[k] + 1, s, len);
+				heb_font_map(shown[k] + 1, len, opt.hebfont);
+				if (it == cur)
+					tree[row[k]].ob_state = SELECTED;
+			}
 		}
-		if (first > 0)
-			b_prev = d_button(3, rows + 4, 8, "<<", EXIT);
-		if (first + PAGE < n)
-			b_next = d_button(13, rows + 4, 8, ">>", EXIT);
-		b_cancel = d_button(27, rows + 4, 10, "Cancel", EXIT | DEFAULT);
-		d_end();
-		r = d_do(0);
-		if (r == b_cancel)
-			return -1;
-		if (r == b_prev) {
-			first -= PAGE;
-			continue;
+		if (n > PROWS)
+			snprintf(count, sizeof(count), "%d-%d of %d", first + 1,
+				 first + PROWS < n ? first + PROWS : n, n);
+		else
+			snprintf(count, sizeof(count), n == 1 ? "1 to choose from" : "%d to choose from", n);
+		tree[b_up].ob_state = first > 0 ? 0 : DISABLED;
+		tree[b_down].ob_state = first + PROWS < n ? 0 : DISABLED;
+		tree[b_ok].ob_state = cur >= 0 ? 0 : DISABLED;
+		if (result == -1) {
+			/* first time round: open the dialog */
+			form_center(tree, &x, &y, &w, &h);
+			wind_update(BEG_UPDATE);
+			wind_update(3);
+			form_dial(FMD_START, x, y, w, h);
+			objc_draw(tree, 0, 8, x, y, w, h);
+			result = -2;
+		} else {
+			/* only the list, the arrows, the count and OK change */
+			objc_offset(tree, box, &bx, &by);
+			objc_draw(tree, 0, 8, bx - 1, by - 1, tree[box].ob_width + 2, tree[box].ob_height + 2);
+			objc_draw(tree, b_up, 0, x, y, w, h);
+			objc_draw(tree, b_down, 0, x, y, w, h);
+			objc_offset(tree, f_count, &bx, &by);
+			objc_draw(tree, 0, 8, bx, by, tree[f_count].ob_width, tree[f_count].ob_height);
+			objc_draw(tree, b_ok, 0, x, y, w, h);
 		}
-		if (r == b_next) {
-			first += PAGE;
-			continue;
+		r = form_do(tree, 0);
+		{
+			int dbl = (r & 0x8000) != 0;
+			r &= 0x7fff;
+			tree[r].ob_state &= ~SELECTED;
+			if (r == b_cancel)
+				break;
+			if (r == b_ok) {
+				if (cur >= 0) {
+					result = cur;
+					break;
+				}
+				continue;
+			}
+			if (r == b_up && first > 0) {
+				first -= PROWS;
+				if (first < 0)
+					first = 0;
+				evnt_timer_(120);	/* held down: a page at a time */
+				continue;
+			}
+			if (r == b_down && first + PROWS < n) {
+				first += PROWS;
+				evnt_timer_(120);
+				continue;
+			}
+			for (k = 0; k < PROWS; k++)
+				if (r == row[k] && first + k < n) {
+					cur = first + k;
+					if (dbl)
+						result = cur;
+				}
+			if (result >= 0)
+				break;
 		}
-		for (i = 0; i < k; i++)
-			if (obj[i] == r)
-				return first + i;
-		return -1;
 	}
+	form_dial(FMD_FINISH, x, y, w, h);
+	wind_update(2);
+	wind_update(END_UPDATE);
+	return result >= 0 ? result : -1;
 }
 
 short dlg_pick_list(const char *title, const char **items, short n);
@@ -688,8 +755,42 @@ short dlg_pick_list(const char *title, const char **items, short n)
 	return pick(title, items, n);
 }
 
+/* a folder's name with its parents', "Archive / 2023", so two folders
+   of the same name can be told apart */
+static void folder_label(ACCOUNT *a, FINFO *f, char *out, int size)
+{
+	FINFO *parent = 0;
+	short i;
+	size_t best = 0;
+	if (f->depth > 0) {
+		for (i = 0; i < a->nfolders; i++) {
+			FINFO *g = &a->folders[i];
+			size_t l = strlen(g->server);
+			if (g != f && g->depth == f->depth - 1 && l > best && !strncmp(g->server, f->server, l) &&
+			    f->server[l] && !((f->server[l] | 0x20) >= 'a' && (f->server[l] | 0x20) <= 'z')) {
+				parent = g;
+				best = l;
+			}
+		}
+	}
+	if (parent) {
+		char up[120];
+		folder_label(a, parent, up, sizeof(up));
+		snprintf(out, size, "%s / %s", up, f->disp);
+	} else {
+		str_copy(out, f->disp, size);
+	}
+}
+
+static int cmp_label(const void *x, const void *y)
+{
+	const char *a = *(const char * const *)x, *b = *(const char * const *)y;
+	return strcasecmp(a, b);
+}
+
 FINFO *dlg_pick_folder(ACCOUNT *a, const char *title)
 {
+	static char labels[MAXFOLDER][100];
 	const char *items[MAXFOLDER];
 	FINFO *map[MAXFOLDER];
 	short i, n = 0, r;
@@ -699,12 +800,28 @@ FINFO *dlg_pick_folder(ACCOUNT *a, const char *title)
 			continue;
 		if (cur_finfo && f->local != cur_finfo->local)
 			continue;
-		items[n] = f->disp;
-		map[n++] = f;
+		folder_label(a, f, labels[n], sizeof(labels[n]));
+		items[n] = labels[n];
+		n++;
 	}
 	if (!n) {
 		alert(1, "[1][There is no other folder|to choose.][ OK ]");
 		return 0;
+	}
+	/* alphabetical; the labels sit in a fixed array, so find each one's
+	   folder again after sorting */
+	qsort(items, n, sizeof(items[0]), cmp_label);
+	for (r = 0; r < n; r++) {
+		short k = 0;
+		for (i = 0; i < a->nfolders; i++) {
+			FINFO *f = &a->folders[i];
+			if (f->noselect || f->role == FR_OUTBOX || f == cur_finfo ||
+			    (cur_finfo && f->local != cur_finfo->local))
+				continue;
+			if (labels[k] == items[r])
+				map[r] = f;
+			k++;
+		}
 	}
 	r = pick(title, items, n);
 	return r < 0 ? 0 : map[r];
@@ -752,4 +869,30 @@ char *dlg_pick_address(void)
 		res = strdup(items[r]);
 	free(book);
 	return res;
+}
+
+/* ---------------- the keys (Help) ---------------- */
+
+void dlg_keys(void)
+{
+	static const char *lines[] = {
+		"^N  new message        ^K  check mail",
+		"^R  reply              ^E  reply to all",
+		"^F  forward            ^U  mark as unread",
+		"^G  flag / unflag      ^M  move to a folder",
+		"Del delete             ^A  select all",
+		"Shift+click   add or remove one message",
+		"Control+click select a range of messages",
+		"Tab next pane          F10 Hebrew keyboard",
+		"In the editor: ^S send  ^T attach  ^B addresses",
+		"^Q  quit"
+	};
+	short i, n = (short)(sizeof(lines) / sizeof(lines[0]));
+	d_begin(52, n + 6);
+	d_add(G_STRING, 0, 0, (long)"Keys", 2, 1, 4, 1);
+	for (i = 0; i < n; i++)
+		d_text(3, 3 + i, lines[i]);
+	d_button(40, n + 4, 10, "OK", EXIT | DEFAULT);
+	d_end();
+	d_do(0);
 }
