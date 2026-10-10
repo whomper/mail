@@ -161,6 +161,50 @@ static const char *const eye_art[16] = {
 	"................",
 };
 static unsigned short eye_open[16], eye_shut[16];
+
+/* a tick box, 16 pixels square, and the tick in it */
+static const char *tick_art[16] = {
+	"................",
+	".##############.",
+	".#............#.",
+	".#..........#.#.",
+	".#.........##.#.",
+	".#........##..#.",
+	".#.......##...#.",
+	".#.##...##....#.",
+	".#.###.##.....#.",
+	".#..####......#.",
+	".#...##.......#.",
+	".#............#.",
+	".#............#.",
+	".#............#.",
+	".##############.",
+	"................",
+};
+static unsigned short tick_on[16], tick_off[16];
+static BITBLK tick_on_blk, tick_off_blk;
+
+static void make_ticks(void)
+{
+	/* half height on 8-pixel screens: every other line, and the frame */
+	short tall = gl_hchar >= 16, rows = tall ? 16 : 8, r, c;
+	for (r = 0; r < rows; r++) {
+		const char *src = tick_art[tall ? r : (r == rows - 1 ? 14 : r * 2 + (r ? 0 : 1))];
+		unsigned short v = 0, frame = 0;
+		for (c = 0; c < 16; c++) {
+			v = (unsigned short)((v << 1) | (src[c] == '#'));
+			frame = (unsigned short)((frame << 1) | (src[c] == '#' && (c == 1 || c == 14 || r == 0 || r == rows - 1 ||
+										(tall && (r == 1 || r == 14)))));
+		}
+		tick_on[r] = v;
+		tick_off[r] = tall ? (r == 1 || r == 14 ? v : (r == 0 || r == 15 ? 0 : 0x4002)) : (r == 0 || r == rows - 1 ? v : 0x4002);
+	}
+	tick_on_blk.bi_pdata = tick_on;
+	tick_off_blk.bi_pdata = tick_off;
+	tick_on_blk.bi_wb = tick_off_blk.bi_wb = 2;
+	tick_on_blk.bi_hl = tick_off_blk.bi_hl = rows;
+	tick_on_blk.bi_color = tick_off_blk.bi_color = 1;
+}
 static BITBLK eye_blk[PWMAX];
 
 static void make_eyes(void)
@@ -557,55 +601,291 @@ int dlg_account(ACCOUNT *a)
 
 /* ---------------- settings ---------------- */
 
+/* ---------------- settings ----------------
+ * A black title band, a list of parts on the left (the chosen one in a
+ * black bar) and that part's settings on the right: ticks (a box that is
+ * crossed when on, clicked on the box or its words) and framed fields. */
+
+static char s_tz[6], s_check[4], s_page[5], s_wrap[3];
+static short s_on[6];			/* keep, log, hebrew, bridge, falcon, dsp */
+enum { T_KEEP, T_LOG, T_HEB, T_BRIDGE, T_FALCON, T_DSP };
+
+#define NTICK 8
+static short tick_box[NTICK], tick_lbl[NTICK], tick_var[NTICK], nticks;
+static short page_of[DMAX], npages, cur_page, page_tab[4];
+static GRECT page_area;
+
+static TEDINFO *d_ted(const char *text, short just, short color)
+{
+	TEDINFO *t = &ted[nted++];
+	t->te_ptext = (char *)text;
+	t->te_ptmplt = "";
+	t->te_pvalid = "";
+	t->te_font = 3;
+	t->te_just = just;
+	t->te_color = color;
+	t->te_thickness = 0;
+	t->te_txtlen = (short)strlen(text) + 1;
+	t->te_tmplen = 1;
+	return t;
+}
+
+/* black band across the top, white title */
+static void d_band(short w, const char *title)
+{
+	d_add(G_BOXTEXT, 0, 0, (long)d_ted(title, 0, 0x1071), 0, 0, w, 1);
+}
+
+static short d_tick(short x, short y, const char *label, short var)
+{
+	short k = nticks++;
+	tick_var[k] = var;
+	if (!tick_on_blk.bi_pdata)
+		make_ticks();
+	tick_box[k] = d_add(G_IMAGE, TOUCHEXIT, 0, (long)(s_on[var] ? &tick_on_blk : &tick_off_blk), x, y, 2, 1);
+	tick_lbl[k] = d_add(G_STRING, TOUCHEXIT, 0, (long)label, x + 3, y, (short)strlen(label), 1);
+	return k;
+}
+
+static void tick_draw(short k)
+{
+	OBJECT *o = &tree[tick_box[k]];
+	short x, y;
+	o->ob_spec = (long)(s_on[tick_var[k]] ? &tick_on_blk : &tick_off_blk);
+	objc_offset(tree, tick_box[k], &x, &y);
+	objc_draw(tree, 0, 8, x, y, o->ob_width, o->ob_height);
+}
+
+/* a number field in a thin frame */
+static short d_field(short x, short y, char *buf, short len, char kind)
+{
+	short i = d_edit(x, y, buf, len, kind);
+	TEDINFO *t = (TEDINFO *)tree[i].ob_spec;
+	tree[i].ob_type = G_FBOXTEXT;
+	t->te_thickness = -1;
+	t->te_color = 0x1180;
+	return i;
+}
+
+/* rows of a part: y in characters plus a few pixels per framed field
+   above, so the frames don't touch */
+static short row_pix;
+#define ROW(y) ((short)((y) | (row_pix << 8)))
+#define FIELD_GAP 4
+
+/* objects added from here on belong to page p (0: always shown) */
+static short adding_page;
+
+static void page_mark(short from)
+{
+	short i;
+	for (i = from; i < nobj; i++)
+		page_of[i] = adding_page;
+}
+
+static void show_page(short p, int draw)
+{
+	short i;
+	cur_page = p;
+	for (i = 1; i < nobj; i++) {
+		if (!page_of[i])
+			continue;
+		if (page_of[i] == p) {
+			tree[i].ob_flags &= ~HIDETREE;
+			if (tree[i].ob_type == G_FTEXT)
+				tree[i].ob_flags |= EDITABLE;
+		} else {
+			tree[i].ob_flags |= HIDETREE;
+			tree[i].ob_flags &= ~EDITABLE;
+		}
+	}
+	for (i = 1; i <= npages; i++)
+		tree[page_tab[i]].ob_state = i == p ? SELECTED : 0;
+	if (draw) {
+		short x, y, k;
+		for (k = 1; k <= npages; k++) {
+			objc_offset(tree, page_tab[k], &x, &y);
+			objc_draw(tree, 0, 8, x - 2, y - 2, tree[page_tab[k]].ob_width + 4,
+				  tree[page_tab[k]].ob_height + 4);
+		}
+		objc_draw(tree, 0, 8, page_area.x, page_area.y, page_area.w, page_area.h);
+	}
+}
+
+static short first_edit(void)
+{
+	short i;
+	for (i = 1; i < nobj; i++)
+		if ((tree[i].ob_flags & EDITABLE) && !(tree[i].ob_flags & HIDETREE))
+			return i;
+	return 0;
+}
+
+/* the dialog stays open while ticks and pages change */
+static short settings_run(short pages_box)
+{
+	short x, y, w, h, r, k;
+	if (pages_box) {
+		objc_offset(tree, pages_box, &page_area.x, &page_area.y);
+		page_area.w = tree[pages_box].ob_width;
+		page_area.h = tree[pages_box].ob_height;
+	}
+	form_center(tree, &x, &y, &w, &h);
+	wind_update(BEG_UPDATE);
+	wind_update(3);
+	form_dial(FMD_START, x, y, w, h);
+	if (pages_box) {
+		objc_offset(tree, pages_box, &page_area.x, &page_area.y);
+	}
+	objc_draw(tree, 0, 8, x, y, w, h);
+	for (;;) {
+		r = form_do(tree, first_edit()) & 0x7fff;
+		for (k = 0; k < nticks; k++)
+			if (r == tick_box[k] || r == tick_lbl[k]) {
+				s_on[tick_var[k]] = !s_on[tick_var[k]];
+				tick_draw(k);
+				evnt_timer_(120);
+				break;
+			}
+		if (k < nticks)
+			continue;
+		for (k = 1; k <= npages; k++)
+			if (r == page_tab[k])
+				break;
+		if (k <= npages) {
+			if (k != cur_page)
+				show_page(k, 1);
+			continue;
+		}
+		break;
+	}
+	form_dial(FMD_FINISH, x, y, w, h);
+	wind_update(2);
+	wind_update(END_UPDATE);
+	tree[r].ob_state &= ~SELECTED;
+	return r;
+}
+
+static void settings_begin(short w, short h)
+{
+	d_begin(w, h);
+	nticks = 0;
+	npages = 0;
+	adding_page = 0;
+	memset(page_of, 0, sizeof(page_of));
+	snprintf(s_tz, sizeof(s_tz), "%d", opt.tz);
+	snprintf(s_check, sizeof(s_check), "%d", opt.check);
+	snprintf(s_page, sizeof(s_page), "%d", opt.page);
+	snprintf(s_wrap, sizeof(s_wrap), "%d", opt.wrap);
+	s_on[T_KEEP] = opt.keepcache;
+	s_on[T_LOG] = opt.log;
+	s_on[T_HEB] = opt.hebrew;
+	s_on[T_BRIDGE] = cs_bridge_visual;
+	s_on[T_FALCON] = dlg_falcon;
+	s_on[T_DSP] = opt.dsp;
+}
+
+/* the settings of each part, at (x, y); fields in one column. Each
+   returns its height: characters, plus pixels in the high byte */
+#define FX 30
+
+static short part_mail(short x, short y)
+{
+	row_pix = 2;
+	d_add(G_STRING, 0, 0, (long)"Check for new mail every", x, ROW(y), 24, 1);
+	d_field(x + FX, ROW(y), s_check, 3, '9');
+	d_add(G_STRING, 0, 0, (long)"min", x + FX + 4, ROW(y), 3, 1);
+	row_pix += FIELD_GAP;
+	d_add(G_STRING, 0, 0, (long)"Messages to load at a time", x, ROW(y + 1), 26, 1);
+	d_field(x + FX, ROW(y + 1), s_page, 4, '9');
+	row_pix += FIELD_GAP;
+	d_tick(x, ROW(y + 2), "Keep read messages on disk", T_KEEP);
+	return (short)(3 | ((row_pix + 2) << 8));
+}
+
+static short part_writing(short x, short y)
+{
+	row_pix = 2;
+	d_add(G_STRING, 0, 0, (long)"Wrap my lines at column", x, ROW(y), 23, 1);
+	d_field(x + FX, ROW(y), s_wrap, 2, '9');
+	row_pix += FIELD_GAP;
+	d_tick(x, ROW(y + 1), "Start with the Hebrew keyboard", T_HEB);
+	d_tick(x, ROW(y + 2), "Hebrew from a Troll bridge is reversed", T_BRIDGE);
+	return (short)(3 | ((row_pix + 2) << 8));
+}
+
+static short part_connection(short x, short y)
+{
+	row_pix = 2;
+	d_add(G_STRING, 0, 0, (long)"Time zone, minutes from UTC", x, ROW(y), 27, 1);
+	d_field(x + FX, ROW(y), s_tz, 5, 'X');
+	row_pix += FIELD_GAP;
+	d_tick(x, ROW(y + 1), "Falcon mode: TLS on this Atari", T_FALCON);
+	d_add(G_STRING, 0, 0, (long)"off: plain, through the Pi gateway", x + 3, ROW(y + 2), 34, 1);
+	d_tick(x + 3, ROW(y + 3), "Use the DSP for the signatures", T_DSP);
+	d_tick(x, ROW(y + 4), "Write a protocol log (EMAIL.LOG)", T_LOG);
+	return (short)(5 | ((row_pix + 2) << 8));
+}
+
+static short settings_sidebar(short *ok)
+{
+	static const char *names[] = { "  Mail", "  Writing", "  Connection" };
+	short k, box, from;
+	settings_begin(60, 15);
+	d_band(60, " Settings");
+	/* the list: plain words on white, the chosen one in a black bar, a
+	   line between it and the settings */
+	d_add(G_BOX, 0, 0, 0x00001171L, 16, 1, (short)(0 | (1 << 8)), 14);
+	for (k = 0; k < 3; k++) {
+		npages++;
+		page_tab[npages] = d_add(G_BOXTEXT, TOUCHEXIT, 0, (long)d_ted(names[k], 0, 0x1180),
+					 (short)(0 | (2 << 8)), 2 + k * 2, (short)(15 | (6 << 8)), 1);
+	}
+	box = d_add(G_IBOX, 0, 0, 0, 17, 2, 42, 9);
+	for (k = 1; k <= 3; k++) {
+		from = nobj;
+		adding_page = k;
+		d_add(G_STRING, 0, 0, (long)(names[k - 1] + 2), 18, 2, (short)strlen(names[k - 1] + 2), 1);
+		d_add(G_BOX, 0, 0, 0x00001171L, 18, (short)(3 | (2 << 8)), 40, (short)(0 | (1 << 8)));
+		if (k == 1)
+			part_mail(18, 4);
+		else if (k == 2)
+			part_writing(18, 4);
+		else
+			part_connection(18, 4);
+		page_mark(from);
+	}
+	adding_page = 0;
+	d_button(36, 12, 10, "Cancel", EXIT);
+	*ok = d_button(48, 12, 10, "OK", EXIT | DEFAULT);
+	d_end();
+	show_page(1, 0);
+	return box;
+}
+
 int dlg_settings(void)
 {
-	static char tz[6], check[4], hdrs[5], wrap[3];
-	short f_tz, f_check, f_hdrs, f_wrap, f_keep, f_log, f_heb, f_bridge, f_falcon, f_dsp, b_ok, r;
-	snprintf(tz, sizeof(tz), "%d", opt.tz);
-	snprintf(check, sizeof(check), "%d", opt.check);
-	snprintf(hdrs, sizeof(hdrs), "%d", opt.page);
-	snprintf(wrap, sizeof(wrap), "%d", opt.wrap);
-
-	d_begin(52, 18);
-	d_add(G_STRING, 0, 0, (long)"Settings", 2, 1, 8, 1);
-	d_text(2, 3, "Time zone, minutes east of UTC:");
-	f_tz = d_edit(40, 3, tz, 5, 'X');
-	d_text(2, 4, "Check mail every N minutes (0: off):");
-	f_check = d_edit(40, 4, check, 3, '9');
-	d_text(2, 5, "Messages to load at a time:");
-	f_hdrs = d_edit(40, 5, hdrs, 4, '9');
-	d_text(2, 6, "Wrap my lines at column:");
-	f_wrap = d_edit(40, 6, wrap, 2, '9');
-	f_keep = d_check(2, 8, "Keep read messages on disk", opt.keepcache);
-	f_log = d_check(2, 9, "Write a protocol log (EMAIL.LOG)", opt.log);
-	f_heb = d_check(2, 10, "Start with the Hebrew keyboard", opt.hebrew);
-	f_bridge = d_check(2, 11, "Bridge sends Hebrew reversed (Troll bridge)", cs_bridge_visual);
-	f_falcon = d_check(2, 13, "Falcon mode: secure (TLS) on this Atari", dlg_falcon);
-	d_text(4, 14, "off: plain, through the Raspberry Pi gateway");
-	f_dsp = d_check(4, 15, "use the DSP for the signatures", opt.dsp);
-	d_button(28, 16, 10, "Cancel", EXIT);
-	b_ok = d_button(40, 16, 10, "OK", EXIT | DEFAULT);
-	d_end();
-	(void)f_check; (void)f_hdrs; (void)f_wrap;
-	r = d_do(f_tz);
-	if (r != b_ok)
+	short ok, box, r;
+	box = settings_sidebar(&ok);
+	r = settings_run(box);
+	if (r != ok)
 		return 0;
-	opt.tz = (short)atoi(tz);
-	opt.check = (short)atoi(check);
-	opt.page = (short)atoi(hdrs);
+	opt.tz = (short)atoi(s_tz);
+	opt.check = (short)atoi(s_check);
+	opt.page = (short)atoi(s_page);
 	if (opt.page < 20)
 		opt.page = 20;
 	if (opt.page > 1000)
 		opt.page = 1000;
-	opt.wrap = (short)atoi(wrap);
+	opt.wrap = (short)atoi(s_wrap);
 	if (opt.wrap < 40 || opt.wrap > 78)
 		opt.wrap = 72;
-	opt.keepcache = selected(f_keep);
-	opt.log = selected(f_log);
-	opt.hebrew = selected(f_heb);
-	cs_bridge_visual = selected(f_bridge);
-	dlg_falcon = selected(f_falcon);
-	opt.dsp = selected(f_dsp);
+	opt.keepcache = s_on[T_KEEP];
+	opt.log = s_on[T_LOG];
+	opt.hebrew = s_on[T_HEB];
+	cs_bridge_visual = s_on[T_BRIDGE];
+	dlg_falcon = s_on[T_FALCON];
+	opt.dsp = s_on[T_DSP];
 	return 1;
 }
 

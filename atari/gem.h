@@ -36,6 +36,7 @@ typedef struct {
 #define RBUTTON   0x0010
 #define LASTOB    0x0020
 #define TOUCHEXIT 0x0040
+#define HIDETREE  0x0080
 #define SELECTED  0x0001
 #define CROSSED   0x0002
 #define CHECKED   0x0004
