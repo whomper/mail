@@ -38,13 +38,6 @@ C:\EMAIL\EMAIL\         your mail: one folder per account, one per mailbox
 
 Start it. The first time, EMail asks for your account.
 
-**Coming from MAIL.PRG?** EMail is the same program under a new name. Put
-EMAIL.PRG where MAIL.PRG was and delete MAIL.PRG: at its first start EMail
-renames MAIL.INF, MAIL.KEY and MAIL.LOG to EMAIL.INF, EMAIL.KEY and
-EMAIL.LOG and the MAIL folder to EMAIL, so your accounts, passwords and
-mail come along. (Where TOS can't rename a folder, EMail keeps using the
-MAIL folder as it is.)
-
 ## Setting up an account
 
 Options > Accounts > New, or the dialog EMail shows at first start:

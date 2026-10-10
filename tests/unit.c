@@ -341,47 +341,10 @@ static void t_inf(void)
 	rmdir(dir);
 }
 
-/* an installation from when the program was MAIL.PRG: its files are
-   taken along, the encrypted password still opens */
-static void t_rename(void)
-{
-	char dir[64], p1[120], p2[120], sealed[300];
-	snprintf(dir, sizeof(dir), "/tmp/mail-unit-old.%d", (int)getpid());
-	mkdir(dir, 0755);
-	snprintf(p1, sizeof(p1), "%s/MAIL.KEY", dir);
-	secret_init(p1);
-	secret_encode("s3cret", sealed, sizeof(sealed));
-	snprintf(p1, sizeof(p1), "%s/MAIL.INF", dir);
-	{
-		char inf[400];
-		snprintf(inf, sizeof(inf), "[OPTIONS]\r\nTZ=120\r\n[ACCOUNT]\r\nNAME=Home\r\nUSER=a\r\nPASS=%s\r\n", sealed);
-		pf_save(p1, inf, (long)strlen(inf));
-	}
-	snprintf(p1, sizeof(p1), "%s/MAIL", dir);
-	mkdir(p1, 0755);
-	forget_accounts();
-	CHECK(store_init(dir) == 1, "old MAIL.INF found");
-	CHECK(!store_lost_passwords && !strcmp(accts[0]->pass, "s3cret"), "old MAIL.KEY still opens the password");
-	snprintf(p1, sizeof(p1), "%s/EMAIL.INF", dir);
-	snprintf(p2, sizeof(p2), "%s/EMAIL.KEY", dir);
-	CHECK(pf_exists(p1) && pf_exists(p2), "renamed to EMAIL.INF and EMAIL.KEY");
-	snprintf(p1, sizeof(p1), "%s/EMAIL", dir);
-	CHECK(pf_exists(p1), "the MAIL folder is now EMAIL");
-	forget_accounts();
-	unlink(p2);
-	snprintf(p2, sizeof(p2), "%s/EMAIL.INF", dir);
-	unlink(p2);
-	snprintf(p2, sizeof(p2), "%s/EMAIL/ACCT1", dir);
-	rmdir(p2);
-	rmdir(p1);
-	rmdir(dir);
-}
-
 int main(void)
 {
 	t_num();
 	t_inf();
-	t_rename();
 	t_charset();
 	t_mime();
 	t_compose();

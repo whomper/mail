@@ -304,16 +304,6 @@ static void set_opt(const char *k, const char *v)
 	else if (!strcmp(k, "hebfont")) opt.hebfont = n >= 0 && n <= 2 ? n : 0;
 }
 
-/* a file from when the program was MAIL.PRG, under its new name */
-static void old_name(const char *workdir, const char *from, const char *to)
-{
-	char a[220], b[220];
-	path_join(a, sizeof(a), workdir, from);
-	path_join(b, sizeof(b), workdir, to);
-	if (!pf_exists(b) && pf_exists(a))
-		pf_rename(a, b);
-}
-
 int store_init(const char *workdir)
 {
 	char *buf, *line, *next;
@@ -323,24 +313,13 @@ int store_init(const char *workdir)
 	defaults();
 	str_copy(opt.workdir, workdir, sizeof(opt.workdir));
 	path_join(inf_path, sizeof(inf_path), workdir, "EMAIL.INF");
-	old_name(workdir, "MAIL.INF", "EMAIL.INF");
-	old_name(workdir, "MAIL.KEY", "EMAIL.KEY");
-	old_name(workdir, "MAIL.LOG", "EMAIL.LOG");
 	{
 		char kf[220];
 		path_join(kf, sizeof(kf), workdir, "EMAIL.KEY");
 		secret_init(kf);
 		store_lost_passwords = store_plain_passwords = 0;
 	}
-	/* the program was called MAIL.PRG: take its files along. TOS can't
-	   rename folders, so an old MAIL folder may stay in use as it is */
 	path_join(mail_dir, sizeof(mail_dir), workdir, "EMAIL");
-	{
-		char old[220];
-		path_join(old, sizeof(old), workdir, "MAIL");
-		if (!pf_exists(mail_dir) && pf_exists(old) && pf_rename(old, mail_dir) != 0)
-			str_copy(mail_dir, old, sizeof(mail_dir));
-	}
 	pf_mkdir(mail_dir);
 	/* Falcon mode: the root certificates next to EMAIL.PRG, the random
 	   seed with the mail */
