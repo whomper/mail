@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""End-to-end test of MAIL.PRG on an emulated Falcon with real servers.
+"""End-to-end test of EMAIL.PRG on an emulated Falcon with real servers.
 
 Dovecot (IMAP) and tests/smtp_server.py run on this computer; Hatari has
-no network card, so FAKESTNG.PRG in C:\\AUTO tunnels MAIL's TCP
-connections over the emulated serial port to serial_bridge.py. MAIL
+no network card, so FAKESTNG.PRG in C:\\AUTO tunnels EMail's TCP
+connections over the emulated serial port to serial_bridge.py. EMail
 reads the inbox, opens a Hebrew message, and sends a Hebrew reply; the
 test then checks on the server that the reply arrived.
 
@@ -53,9 +53,9 @@ smtp = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests", "smtp_serve
 
 # drive C:
 os.makedirs(os.path.join(hd, "AUTO"))
-shutil.copy(os.path.join(ROOT, "MAIL.PRG"), hd)
+shutil.copy(os.path.join(ROOT, "EMAIL.PRG"), hd)
 shutil.copy(os.path.join(ROOT, "tools", "fakesting", "FAKESTNG.PRG"), os.path.join(hd, "AUTO"))
-with open(os.path.join(hd, "MAIL.INF"), "w", newline="") as f:
+with open(os.path.join(hd, "EMAIL.INF"), "w", newline="") as f:
     f.write("[options]\r\ntz=180\r\nlog=1\r\n[account]\r\nname=Dana\r\nfullname=Dana Falcon\r\n"
             "email=dana@test.local\r\nin=imap\r\nhost=127.0.0.1\r\nport=%d\r\nuser=dana\r\n"
             "pass=secret\r\nsmtphost=127.0.0.1\r\nsmtpport=%d\r\nsignature=Sent from my Falcon\r\n"

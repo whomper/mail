@@ -2,7 +2,7 @@
 """Selecting several messages and moving them, on an emulated Falcon.
 
 Like net_test.py (Dovecot here, FAKESTNG.PRG and serial_bridge.py for the
-network), with 16 extra folders so the move dialog pages. MAIL selects
+network), with 16 extra folders so the move dialog pages. EMail selects
 two messages with Shift+click, opens Move (^M), pages the folder list
 down and back, picks Archive and moves both; the test checks the server.
 
@@ -59,9 +59,9 @@ smtp = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests", "smtp_serve
 
 # drive C:
 os.makedirs(os.path.join(hd, "AUTO"))
-shutil.copy(os.path.join(ROOT, "MAIL.PRG"), hd)
+shutil.copy(os.path.join(ROOT, "EMAIL.PRG"), hd)
 shutil.copy(os.path.join(ROOT, "tools", "fakesting", "FAKESTNG.PRG"), os.path.join(hd, "AUTO"))
-with open(os.path.join(hd, "MAIL.INF"), "w", newline="") as f:
+with open(os.path.join(hd, "EMAIL.INF"), "w", newline="") as f:
     f.write("[options]\r\ntz=180\r\nlog=1\r\n[account]\r\nname=Dana\r\nfullname=Dana Falcon\r\n"
             "email=dana@test.local\r\nin=imap\r\nhost=127.0.0.1\r\nport=%d\r\nuser=dana\r\n"
             "pass=secret\r\nsmtphost=127.0.0.1\r\nsmtpport=%d\r\nsignature=Sent from my Falcon\r\n"

@@ -1,5 +1,5 @@
 /*
- * dialogs.c - MAIL's dialogs, built in code (no .RSC file needed):
+ * dialogs.c - EMail's dialogs, built in code (no .RSC file needed):
  * account setup, settings, a one-line question, list pickers, alerts.
  */
 #include <string.h>
@@ -577,7 +577,7 @@ int dlg_settings(void)
 	d_text(2, 6, "Wrap my lines at column:");
 	f_wrap = d_edit(40, 6, wrap, 2, '9');
 	f_keep = d_check(2, 8, "Keep read messages on disk", opt.keepcache);
-	f_log = d_check(2, 9, "Write a protocol log (MAIL.LOG)", opt.log);
+	f_log = d_check(2, 9, "Write a protocol log (EMAIL.LOG)", opt.log);
 	f_heb = d_check(2, 10, "Start with the Hebrew keyboard", opt.hebrew);
 	f_bridge = d_check(2, 11, "Bridge sends Hebrew reversed (Troll bridge)", cs_bridge_visual);
 	f_falcon = d_check(2, 13, "Falcon mode: secure (TLS) on this Atari", dlg_falcon);

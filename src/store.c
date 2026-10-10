@@ -240,15 +240,15 @@ void acct_delete(ACCOUNT *a)
 
 int store_lost_passwords, store_plain_passwords;
 
-/* a password from MAIL.INF: encrypted ({E}...) or, from an older MAIL,
-   as typed. One this MAIL.KEY can't open is left empty */
+/* a password from EMAIL.INF: encrypted ({E}...) or, from an older EMail,
+   as typed. One this EMAIL.KEY can't open is left empty */
 static void unseal(char *field, const char *v, int size)
 {
 	if (!secret_decode(v, field, size)) {
 		field[0] = 0;
 		store_lost_passwords = 1;
 	} else if (*v && strncmp(v, SECRET_TAG, strlen(SECRET_TAG))) {
-		store_plain_passwords = 1;	/* written by an older MAIL */
+		store_plain_passwords = 1;	/* written by an older EMail */
 	}
 }
 
@@ -304,6 +304,16 @@ static void set_opt(const char *k, const char *v)
 	else if (!strcmp(k, "hebfont")) opt.hebfont = n >= 0 && n <= 2 ? n : 0;
 }
 
+/* a file from when the program was MAIL.PRG, under its new name */
+static void old_name(const char *workdir, const char *from, const char *to)
+{
+	char a[220], b[220];
+	path_join(a, sizeof(a), workdir, from);
+	path_join(b, sizeof(b), workdir, to);
+	if (!pf_exists(b) && pf_exists(a))
+		pf_rename(a, b);
+}
+
 int store_init(const char *workdir)
 {
 	char *buf, *line, *next;
@@ -312,16 +322,27 @@ int store_init(const char *workdir)
 
 	defaults();
 	str_copy(opt.workdir, workdir, sizeof(opt.workdir));
-	path_join(inf_path, sizeof(inf_path), workdir, "MAIL.INF");
+	path_join(inf_path, sizeof(inf_path), workdir, "EMAIL.INF");
+	old_name(workdir, "MAIL.INF", "EMAIL.INF");
+	old_name(workdir, "MAIL.KEY", "EMAIL.KEY");
+	old_name(workdir, "MAIL.LOG", "EMAIL.LOG");
 	{
 		char kf[220];
-		path_join(kf, sizeof(kf), workdir, "MAIL.KEY");
+		path_join(kf, sizeof(kf), workdir, "EMAIL.KEY");
 		secret_init(kf);
 		store_lost_passwords = store_plain_passwords = 0;
 	}
-	path_join(mail_dir, sizeof(mail_dir), workdir, "MAIL");
+	/* the program was called MAIL.PRG: take its files along. TOS can't
+	   rename folders, so an old MAIL folder may stay in use as it is */
+	path_join(mail_dir, sizeof(mail_dir), workdir, "EMAIL");
+	{
+		char old[220];
+		path_join(old, sizeof(old), workdir, "MAIL");
+		if (!pf_exists(mail_dir) && pf_exists(old) && pf_rename(old, mail_dir) != 0)
+			str_copy(mail_dir, old, sizeof(mail_dir));
+	}
 	pf_mkdir(mail_dir);
-	/* Falcon mode: the root certificates next to MAIL.PRG, the random
+	/* Falcon mode: the root certificates next to EMAIL.PRG, the random
 	   seed with the mail */
 	path_join(conn_cacert, sizeof(conn_cacert), workdir, "CACERT.PEM");
 	path_join(tls_seed_path, sizeof(tls_seed_path), mail_dir, "SEED.DAT");
@@ -372,8 +393,8 @@ int store_init(const char *workdir)
 	return naccts;
 }
 
-/* MAIL.INF explains itself: every setting is a ';' line saying what it
- * is, the setting in capitals, and an empty line. MAIL skips the notes
+/* EMAIL.INF explains itself: every setting is a ';' line saying what it
+ * is, the setting in capitals, and an empty line. EMail skips the notes
  * when reading (and reads names in any case) and writes them anew on
  * every save. */
 static void put_str(SBUF *b, const char *note, const char *key, const char *val)
@@ -403,7 +424,7 @@ static void put_fmt(SBUF *b, const char *note, const char *key, const char *fmt,
 	sb_adds(b, "\r\n\r\n");
 }
 
-/* a password, encrypted with MAIL.KEY */
+/* a password, encrypted with EMAIL.KEY */
 static void put_secret(SBUF *b, const char *note, const char *key, const char *val)
 {
 	char sealed[300];
@@ -418,7 +439,7 @@ int store_save_settings(void)
 	int r;
 	tls_tz_minutes = opt.tz;
 	sb_init(&b);
-	sb_adds(&b, "; MAIL settings, written by MAIL.PRG. Lines starting with ; are notes.\r\n"
+	sb_adds(&b, "; EMail settings, written by EMAIL.PRG. Lines starting with ; are notes.\r\n"
 		    "; Most of these are set in Options > Settings; see docs/GUIDE.md.\r\n"
 		    "; 1 means on, 0 means off.\r\n\r\n[OPTIONS]\r\n\r\n");
 	put_fmt(&b, "your time zone in minutes east of UTC (Israel: 120 in winter, 180 in summer)",
@@ -429,17 +450,17 @@ int store_save_settings(void)
 		"PAGE", "%d", opt.page);
 	put_fmt(&b, "1 = keep messages you have read on disk after quitting, 0 = only their headers",
 		"KEEPCACHE", "%d", opt.keepcache);
-	put_fmt(&b, "1 = write the conversation with the servers to MAIL.LOG (passwords hidden)",
+	put_fmt(&b, "1 = write the conversation with the servers to EMAIL.LOG (passwords hidden)",
 		"LOG", "%d", opt.log);
 	put_fmt(&b, "1 = start with the Hebrew keyboard (F10 switches)", "HEBREW", "%d", opt.hebrew);
 	put_fmt(&b, "1 = work offline: don't connect, keep new messages in the Outbox",
 		"OFFLINE", "%d", opt.offline);
 	put_fmt(&b, "the editor wraps lines at this column (40-78)", "WRAP", "%d", opt.wrap);
-	put_fmt(&b, "main window x,y,width,height in pixels; 0,0,0,0 = let MAIL place it",
+	put_fmt(&b, "main window x,y,width,height in pixels; 0,0,0,0 = let EMail place it",
 		"MAIN", "%d,%d,%d,%d", opt.main_x, opt.main_y, opt.main_w, opt.main_h);
 	put_fmt(&b, "dividers: folder pane width, message list height, in pixels",
 		"PANES", "%d,%d", opt.pane_w, opt.pane_h);
-	put_fmt(&b, "editor window x,y,width,height in pixels; 0,0,0,0 = let MAIL place it",
+	put_fmt(&b, "editor window x,y,width,height in pixels; 0,0,0,0 = let EMail place it",
 		"EDITOR", "%d,%d,%d,%d", opt.ed_x, opt.ed_y, opt.ed_w, opt.ed_h);
 	put_fmt(&b, "text font: GDOS font id (1 = system font), size (system font: 0, 8 small, 16 large)",
 		"FONT", "%d,%d", opt.font_id, opt.font_pt);
@@ -463,7 +484,7 @@ int store_save_settings(void)
 		put_str(&b, "incoming server through the Pi gateway: the Pi's IP address", "HOST", a->host);
 		put_fmt(&b, "its port: 143 (IMAP) or 110 (POP3) on the gateway", "PORT", "%u", a->port);
 		put_str(&b, "login for the incoming server (Pi gateway)", "USER", a->user);
-		put_secret(&b, "password, encrypted with MAIL.KEY (type it in Options > Accounts)", "PASS", a->pass);
+		put_secret(&b, "password, encrypted with EMAIL.KEY (type it in Options > Accounts)", "PASS", a->pass);
 		put_fmt(&b, "POP3 only: 1 = leave mail on the server after downloading it",
 			"LEAVE", "%d", a->leave);
 		put_str(&b, "outgoing (SMTP) server through the Pi gateway: the Pi's IP address",
@@ -761,7 +782,7 @@ void fold_count(FOLDER *f)
 	}
 }
 
-/* Index files before version 3 hold headers that MAIL 0.2 misread when
+/* Index files before version 3 hold headers that EMail 0.2 misread when
  * a bridge had already turned them into Atari text. Read them again from
  * the messages on disk; IMAP headers without one are dropped, and the
  * next sync fetches them again from the server. */

@@ -1,6 +1,6 @@
 /*
  * tls.c - TLS 1.2 client on BearSSL 0.6 (third_party/bearssl), for
- * Falcon mode: MAIL talks to the mail provider directly, without the
+ * Falcon mode: EMail talks to the mail provider directly, without the
  * Raspberry Pi gateway.
  *
  * Choices for a 68030 with a DSP56001 next to it:
@@ -364,7 +364,7 @@ int tls_load_anchors(const char *path, char *err, int errlen)
 	if (tls_note)
 		tls_note("Reading the root certificates (only this once, it takes a while)...");
 	/* read in pieces: the whole list is about 190 KB, more than a
-	   1 MB Falcon wants to hold at once next to MAIL */
+	   1 MB Falcon wants to hold at once next to EMail */
 	h = pf_open(path, PF_READ);
 	if (h < 0) {
 		snprintf(err, errlen, "no root certificates: can't open %s", path);
@@ -547,7 +547,7 @@ static void explain(int e, const char *host, char *err, int errlen)
 		break;
 	case BR_ERR_X509_UNSUPPORTED:
 	case BR_ERR_X509_WEAK_PUBLIC_KEY:
-		m = "its certificate uses a kind of key MAIL can't check";
+		m = "its certificate uses a kind of key EMail can't check";
 		break;
 	case BR_ERR_BAD_VERSION:
 	case BR_ERR_UNSUPPORTED_VERSION:

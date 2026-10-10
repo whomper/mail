@@ -1,15 +1,15 @@
 /*
- * store.h - MAIL's data on disk: settings and accounts (MAIL.INF),
+ * store.h - EMail's data on disk: settings and accounts (EMAIL.INF),
  * the folder list of each account, and per folder a header index plus
  * cached message files. Like the GFA Troll, IMAP folders are a mirror
  * of the server (headers always, bodies once read); POP3 accounts keep
  * their mail in local folders. All names are 8.3 so plain TOS copes:
  *
- *   MAIL.INF                  settings and accounts
+ *   EMAIL.INF                  settings and accounts
  *   ADDRESS.TXT                address book, one "Name <a@b>" per line
- *   MAIL\ACCT1\FOLDERS.LST     folders of account 1
- *   MAIL\ACCT1\F1A2B3C4\INDEX.DAT   headers of one folder
- *   MAIL\ACCT1\F1A2B3C4\0000002A.EML  message with UID 42
+ *   EMAIL\ACCT1\FOLDERS.LST     folders of account 1
+ *   EMAIL\ACCT1\F1A2B3C4\INDEX.DAT   headers of one folder
+ *   EMAIL\ACCT1\F1A2B3C4\0000002A.EML  message with UID 42
  */
 #ifndef STORE_H
 #define STORE_H
@@ -78,7 +78,7 @@ typedef struct {
 	short check;		/* minutes between automatic checks, 0 = off */
 	short page;		/* messages loaded at a time (more on request) */
 	short keepcache;	/* keep message bodies on disk when quitting */
-	short log;		/* write MAIL.LOG */
+	short log;		/* write EMAIL.LOG */
 	short hebrew;		/* Hebrew keyboard on at start */
 	short offline;
 	short wrap;		/* compose wrap column */
@@ -117,12 +117,12 @@ extern ACCOUNT *accts[MAXACCT];
 extern short naccts;
 
 /* settings */
-int  store_init(const char *workdir);	/* loads MAIL.INF (creates dirs) */
+int  store_init(const char *workdir);	/* loads EMAIL.INF (creates dirs) */
 int  store_save_settings(void);
-/* MAIL.INF had passwords that MAIL.KEY can't open (a lost or new key):
+/* EMAIL.INF had passwords that EMAIL.KEY can't open (a lost or new key):
    they are empty and must be typed again */
 extern int store_lost_passwords;
-extern int store_plain_passwords;	/* MAIL.INF still has some as typed */
+extern int store_plain_passwords;	/* EMAIL.INF still has some as typed */
 ACCOUNT *acct_new(void);
 /* the servers in use: the gateway's (plain), or in Falcon mode the
    provider's (TLS). smtp: 0 incoming, 1 outgoing */

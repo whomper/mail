@@ -1,6 +1,6 @@
-# MAIL - an email client for the Atari ST/STE/TT/Falcon, in C.
+# EMail - an email client for the Atari ST/STE/TT/Falcon, in C.
 #
-#   make            builds MAIL.PRG with a stock m68k ELF cross compiler
+#   make            builds EMAIL.PRG with a stock m68k ELF cross compiler
 #                   (Debian/Ubuntu: apt install gcc-m68k-linux-gnu).
 #                   No MiNTLib needed: the program is freestanding and
 #                   tools/elf2tos.py writes the TOS header.
@@ -22,7 +22,7 @@ LDFLAGS := -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,atari/link
            -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
 # BearSSL 0.6 (third_party/bearssl) for Falcon mode. On the Atari it is
-# built for the 68030: Falcon mode needs one, the rest of MAIL stays
+# built for the 68030: Falcon mode needs one, the rest of EMail stays
 # 68000 code and runs on any ST.
 BSSL    := third_party/bearssl
 BSSLSRC := $(wildcard $(BSSL)/src/*/*.c)
@@ -43,9 +43,9 @@ OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/sting_s.o $(OBJDIR)/nf.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(CORE) $(ATARI) $(UI)))
 HDRS    := $(wildcard src/*.h atari/*.h atari/include/*.h ui/*.h dsp/*.h)
 
-all: MAIL.PRG ROOTS.DAT
+all: EMAIL.PRG ROOTS.DAT
 
-MAIL.PRG: $(OBJDIR)/mail.elf tools/elf2tos.py
+EMAIL.PRG: $(OBJDIR)/mail.elf tools/elf2tos.py
 	PRGFLAGS=7 python3 tools/elf2tos.py $< $@
 
 $(OBJDIR)/mail.elf: $(OBJS) $(OBJDIR)/libbearssl.a atari/link.ld
@@ -110,6 +110,6 @@ itest: $(OBJDIR)/mail-cli
 	tests/integration.sh
 
 clean:
-	rm -rf $(OBJDIR) MAIL.PRG ROOTS.DAT
+	rm -rf $(OBJDIR) EMAIL.PRG ROOTS.DAT
 
 .PHONY: all test itest clean

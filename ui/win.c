@@ -1,12 +1,12 @@
 /*
- * win.c - MAIL's windows.
+ * win.c - EMail's windows.
  *
  * The main window holds three panes, like a modern mail program and
  * Claude ST's sidebar: folders on the left, the message list on the
  * right, the message below it. The dividers between them can be dragged,
  * each pane has a header strip and its own scroll bar, and the pane last
  * clicked has the keyboard (its header is drawn dark). The editor is a
- * window of its own with the usual GEM slider. Sizes go to MAIL.INF.
+ * window of its own with the usual GEM slider. Sizes go to EMAIL.INF.
  */
 #include <string.h>
 #include "ui.h"
@@ -537,7 +537,7 @@ void main_open(void)
 		alert(1, "[3][No more windows available.][ OK ]");
 		return;
 	}
-	wind_set_str(main_h, WF_NAME, " MAIL ");
+	wind_set_str(main_h, WF_NAME, " EMail ");
 	wind_set_str(main_h, WF_INFO, main_info);
 	wind_open(main_h, x, y, wd, ht);
 	get_main_work();
@@ -818,7 +818,7 @@ void win_hover(short mx, short my)
 	evnt_set_m1(1, mx, my, 1, 1);
 }
 
-/* drag the size box. MAIL draws the outline itself, the way the
+/* drag the size box. EMail draws the outline itself, the way the
    dividers are dragged: graf_rubberbox() hung TOS 4's AES here. */
 static void xor_box(GRECT *r)
 {

@@ -163,7 +163,7 @@ static char *dup0(const char *s)
 	return strdup(s ? s : "");
 }
 
-/* a message that isn't in the cache while MAIL can't connect: say so in
+/* a message that isn't in the cache while EMail can't connect: say so in
    the reader, with what the list knows about it */
 static MSG *missing_note(HDR *h, ACCOUNT *a)
 {
@@ -184,9 +184,9 @@ static MSG *missing_note(HDR *h, ACCOUNT *a)
 	sb_init(&t);
 	sb_adds(&t, "This message hasn't been downloaded yet.\n\n");
 	if (opt.offline)
-		sb_adds(&t, "MAIL is working offline: switch it off in the Options menu to read it.\n");
+		sb_adds(&t, "EMail is working offline: switch it off in the Options menu to read it.\n");
 	else
-		sb_printf(&t, "%s is not connected, so MAIL shows what it has in the cache.\n"
+		sb_printf(&t, "%s is not connected, so EMail shows what it has in the cache.\n"
 			      "Check mail (^K, or click the account's name) to connect again.\n\n%s\n",
 			  a->name, a->cuterr);
 	m->textlen = t.len;

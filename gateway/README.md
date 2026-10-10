@@ -1,13 +1,13 @@
 # The Raspberry Pi mail gateway
 
 Mail providers only accept encrypted connections (TLS) today, and a 16 MHz
-Falcon can't do modern TLS at a usable speed. So MAIL talks plain IMAP,
+Falcon can't do modern TLS at a usable speed. So EMail talks plain IMAP,
 POP3 and SMTP to a Raspberry Pi on your home network, and the Pi talks TLS
 to your provider. The Pi runs [stunnel](https://www.stunnel.org/), set up
 by `install.sh`.
 
 ```
-Atari (MAIL.PRG) --plain, home LAN--> Raspberry Pi (stunnel) --TLS--> imap.gmail.com:993
+Atari (EMAIL.PRG) --plain, home LAN--> Raspberry Pi (stunnel) --TLS--> imap.gmail.com:993
                                                               --TLS--> smtp.gmail.com:465
 ```
 
@@ -19,14 +19,14 @@ and the same Pi can also run Claude ST's bridge.
 On the Pi:
 
 ```
-git clone https://github.com/whomper/MAIL
-cd MAIL/gateway
+git clone https://github.com/whomper/EMail
+cd EMail/gateway
 sudo ./install.sh imap.gmail.com smtp.gmail.com pop.gmail.com
 ```
 
 Name your provider's servers: the IMAP server, the SMTP server and,
 if you want POP3, the POP3 server. The script installs stunnel, starts it
-now and at every boot, and prints what to type into MAIL. Run it again to
+now and at every boot, and prints what to type into EMail. Run it again to
 change servers.
 
 | Provider    | IMAP                  | SMTP                  | POP3                 |
@@ -39,12 +39,12 @@ change servers.
 
 \* iCloud only offers SMTP with STARTTLS on port 587; see below.
 
-Gmail, iCloud and Yahoo need an **app password** for programs like MAIL:
-create one in your account's security settings and use it as MAIL's
+Gmail, iCloud and Yahoo need an **app password** for programs like EMail:
+create one in your account's security settings and use it as EMail's
 password. Outlook.com and Microsoft 365 accept only OAuth sign-in, which
-MAIL can't do.
+EMail can't do.
 
-## In MAIL
+## In EMail
 
 Options > Accounts, with the Pi's address (the script prints it):
 
@@ -63,14 +63,14 @@ on the local network.
 
 ## Next to another bridge
 
-MAIL converts mail to the Atari character set itself, Hebrew included, so
+EMail converts mail to the Atari character set itself, Hebrew included, so
 it only needs a plain TLS tunnel. It also works through the Falcon mail
 proxy made for Troll (`falcon_imap_logproxy.py` in
 [whomper/atari_web](https://github.com/whomper/atari_web), `--hebrew-mode
-glyph`): MAIL recognises its `x-atari-st` text and puts the Hebrew back
+glyph`): EMail recognises its `x-atari-st` text and puts the Hebrew back
 into reading order. That proxy rewrites messages for Troll, though: it
 drops HTML, wraps Hebrew at 60 columns and, for IMAP only, changes what a
-forwarded message carries, so for MAIL this plain tunnel is the better
+forwarded message carries, so for EMail this plain tunnel is the better
 choice. The two run side by side: this gateway on the standard ports
 (143, 587, 110), the Troll proxy on others (e.g. 1143). To give this
 gateway other ports instead:
@@ -109,5 +109,5 @@ sudo ./install.sh imap.mail.me.com smtp.mail.me.com:587
 
 ## Tested
 
-`TLS=1 make itest` runs MAIL's whole integration test through this
+`TLS=1 make itest` runs EMail's whole integration test through this
 stunnel configuration, against servers that only speak TLS.

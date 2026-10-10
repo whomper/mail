@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""End-to-end test of MAIL.PRG's Falcon mode on an emulated Falcon: MAIL
+"""End-to-end test of EMAIL.PRG's Falcon mode on an emulated Falcon: EMail
 speaks TLS to the servers itself (no gateway).
 
 Dovecot (IMAP) and tests/smtp_server.py run on this computer; Hatari has
-no network card, so FAKESTNG.PRG in C:\\AUTO tunnels MAIL's TCP
-connections over the emulated serial port to serial_bridge.py. MAIL
+no network card, so FAKESTNG.PRG in C:\\AUTO tunnels EMail's TCP
+connections over the emulated serial port to serial_bridge.py. EMail
 reads the inbox, opens a Hebrew message, and sends a Hebrew reply; the
 test then checks on the server that the reply arrived.
 
     falcon_test.py WORKDIR EMUTOS.IMG     (needs Xvfb, xdotool, dovecot, openssl)
 
 Like net_test.py, but the servers only speak TLS (IMAPS, SMTP on 465
-style) and MAIL.INF has falcon=1. Extra Hatari options can follow, e.g.
+style) and EMAIL.INF has falcon=1. Extra Hatari options can follow, e.g.
 --dsp emu to check signatures on the DSP.
 """
 import email
@@ -46,10 +46,10 @@ os.chmod(srv, 0o755)
 with open(os.path.join(srv, "users"), "w") as f:
     f.write("dana:{PLAIN}secret\n")
 uid, gid = subprocess.check_output(["id", "-u", "nobody"]).strip(), subprocess.check_output(["id", "-g", "nobody"]).strip()
-# the test certificate: the only root MAIL trusts; valid for the address
-# MAIL uses (the emulator's network bridge has no name lookup)
+# the test certificate: the only root EMail trusts; valid for the address
+# EMail uses (the emulator's network bridge has no name lookup)
 cert, key = os.path.join(srv, "cert.pem"), os.path.join(srv, "key.pem")
-# REUSE=1: the certificate and MAIL's ROOTS.DAT from the last run, to
+# REUSE=1: the certificate and EMail's ROOTS.DAT from the last run, to
 # test a start with the roots cached
 keep = os.path.join(work, "keep")
 reuse = os.environ.get("REUSE") == "1" and os.path.exists(os.path.join(keep, "ROOTS.DAT"))
@@ -77,19 +77,19 @@ smtp = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests", "smtp_serve
 
 # drive C:
 os.makedirs(os.path.join(hd, "AUTO"))
-shutil.copy(os.path.join(ROOT, "MAIL.PRG"), hd)
-# the full Mozilla list MAIL ships, plus the test certificate
+shutil.copy(os.path.join(ROOT, "EMAIL.PRG"), hd)
+# the full Mozilla list EMail ships, plus the test certificate
 with open(os.path.join(hd, "CACERT.PEM"), "wb") as f:
     f.write(open(os.path.join(ROOT, "CACERT.PEM"), "rb").read() + open(cert, "rb").read())
 shutil.copy(os.path.join(ROOT, "tools", "fakesting", "FAKESTNG.PRG"), os.path.join(hd, "AUTO"))
 if reuse:
     shutil.copy(os.path.join(keep, "ROOTS.DAT"), hd)
 elif os.environ.get("NOCACHE") != "1":
-    # decoded on this computer by tools/mkroots, as MAIL ships it
-    # (NOCACHE=1: let MAIL decode CACERT.PEM itself, over a minute)
+    # decoded on this computer by tools/mkroots, as EMail ships it
+    # (NOCACHE=1: let EMail decode CACERT.PEM itself, over a minute)
     subprocess.run([os.path.join(ROOT, "build", "mkroots"), os.path.join(hd, "CACERT.PEM"),
                     os.path.join(hd, "ROOTS.DAT")], check=True)
-with open(os.path.join(hd, "MAIL.INF"), "w", newline="") as f:
+with open(os.path.join(hd, "EMAIL.INF"), "w", newline="") as f:
     # tz=0: the emulator's clock is this computer's, which runs on UTC
     f.write("[options]\r\ntz=0\r\nlog=1\r\nfalcon=1\r\n[account]\r\nname=Dana\r\nfullname=Dana Falcon\r\n"
             "email=dana@test.local\r\nin=imap\r\nhost=127.0.0.1\r\nport=%d\r\nuser=dana\r\n"
@@ -111,9 +111,9 @@ r = rig.Rig(work, tos, serial=(fifo_out, fifo_in), extra=("--memsize", "4") + ex
 
 
 def wait_log(pattern, timeout):
-    """wait until MAIL.LOG has a line containing pattern"""
+    """wait until EMAIL.LOG has a line containing pattern"""
     t0 = time.time()
-    path = os.path.join(hd, "MAIL.LOG")
+    path = os.path.join(hd, "EMAIL.LOG")
     while time.time() - t0 < timeout:
         if os.path.exists(path) and pattern in open(path, "rb").read().decode("latin-1"):
             return True
@@ -167,7 +167,7 @@ try:
     print("inbox subjects:", subjects)
 finally:
     r.stop()
-    log = os.path.join(hd, "MAIL.LOG")
+    log = os.path.join(hd, "EMAIL.LOG")
     if os.path.exists(log):
         for line in open(log, "rb").read().decode("latin-1").splitlines():
             if " -- " in line or " !! " in line:

@@ -1,5 +1,5 @@
 /*
- * secret.c - passwords in MAIL.INF, encrypted (see secret.h).
+ * secret.c - passwords in EMAIL.INF, encrypted (see secret.h).
  */
 #include <string.h>
 #include <stdio.h>
@@ -103,7 +103,7 @@ int secret_decode(const char *in, char *out, int size)
 	unsigned char buf[2 + 4 + 128];
 	int t = (int)strlen(SECRET_TAG), len, n, i;
 	if (strncmp(in, SECRET_TAG, t)) {
-		snprintf(out, size, "%s", in);		/* written by an older MAIL */
+		snprintf(out, size, "%s", in);		/* written by an older EMail */
 		return 1;
 	}
 	in += t;

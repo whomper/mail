@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Add the MAIL icon to EmuTOS's desktop icon file (from Claude ST's tool).
+"""Add the EMail icon to EmuTOS's desktop icon file (from Claude ST's tool).
 
 EmuTOS's desktop loads its icons from EMUICON.RSC in the root of the boot
 drive (it ships with EmuTOS). This writes a copy with the black-and-white
-MAIL icon added at the end, and prints its icon number, for use in
+EMail icon added at the end, and prints its icon number, for use in
 EMUDESK.INF:
 
     tools/icon/add_to_emuicon.py path/to/emuicon.rsc EMUICON.RSC
 
-Then put EMUICON.RSC in the root of the boot drive, drag MAIL.PRG to
+Then put EMUICON.RSC in the root of the boot drive, drag EMAIL.PRG to
 the desktop, and pick the new icon with Options > Install icon.
 """
 import os
@@ -16,7 +16,7 @@ import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MAIL_RSC = os.path.join(HERE, "..", "..", "icons", "MAIL.RSC")
+MAIL_RSC = os.path.join(HERE, "..", "..", "icons", "EMAIL.RSC")
 IB = struct.Struct(">lllhhhhhhhhhhh")        # ICONBLK, 34 bytes
 
 
@@ -80,7 +80,7 @@ def main():
     mail = read_icons(MAIL_RSC)[0]          # the black-and-white G_ICON
     mail = (mail[0], mail[1], b"", mail[3])
     write_rsc(sys.argv[2], icons + [mail])
-    print("Wrote %s with %d icons; MAIL is icon %d (hex %02X)"
+    print("Wrote %s with %d icons; EMail is icon %d (hex %02X)"
           % (sys.argv[2], len(icons) + 1, len(icons), len(icons)))
 
 

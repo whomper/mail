@@ -123,7 +123,7 @@ static void prog_end(void)
 static int offline(void)
 {
 	if (opt.offline) {
-		str_copy(mail_err, "MAIL is working offline (Options menu).", sizeof(mail_err));
+		str_copy(mail_err, "EMail is working offline (Options menu).", sizeof(mail_err));
 		mail_unreachable = 1;
 		return 1;
 	}
@@ -764,7 +764,7 @@ int mail_flag(FOLDER *f, HDR *h, unsigned short flags, int add)
 {
 	unsigned short nf = add ? (h->flags | flags) : (h->flags & ~flags);
 	/* changed here at once; the server hears of it in one batch when
-	   MAIL is idle, at the next sync or at quit (mail_push_flags), so a
+	   EMail is idle, at the next sync or at quit (mail_push_flags), so a
 	   click never waits for the network */
 	if (!f->fi->local && nf != h->flags)
 		nf |= MF_FLAGSYNC;

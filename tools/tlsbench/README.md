@@ -37,7 +37,7 @@ Hatari runs the DSP twice as fast as the real one.
 
 Programs must run from fast RAM: ST-RAM is 16 bits wide and shared with
 the video, and holds a 50 MHz 68030 back to below the speed of a stock
-16 MHz one. The programs here (and MAIL.PRG) ask TOS for fast RAM in
+16 MHz one. The programs here (and EMAIL.PRG) ask TOS for fast RAM in
 their header (PRGFLAGS=7 for tools/elf2tos.py).
 
 Best split: X25519 on the 68030 (about 0.5 s each), the RSA signature

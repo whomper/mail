@@ -1,5 +1,5 @@
 /*
- * main.c - MAIL: start-up, the menu bar, the event loop and the
+ * main.c - EMail: start-up, the menu bar, the event loop and the
  * commands behind menus and keys.
  */
 #include <string.h>
@@ -34,7 +34,7 @@ typedef struct {
 } MITEM;
 
 static const MITEM m_desk[] = {
-	{ "  About MAIL...   ", C_ABOUT }, { "--------------------", C_SEP },
+	{ "  About EMail...    ", C_ABOUT }, { "--------------------", C_SEP },
 	{ "  Desk Accessory 1  ", C_ACC }, { "  Desk Accessory 2  ", C_ACC },
 	{ "  Desk Accessory 3  ", C_ACC }, { "  Desk Accessory 4  ", C_ACC },
 	{ "  Desk Accessory 5  ", C_ACC }, { "  Desk Accessory 6  ", C_ACC }, { 0, 0 }
@@ -68,7 +68,7 @@ static const MITEM m_opts[] = {
 	{ "  Hebrew keyboard F10 ", C_HEBREW }, { "  Protocol log        ", C_LOG }, { 0, 0 }
 };
 
-static const char *titles[] = { " MAIL ", " File ", " Message ", " Folder ", " Options " };
+static const char *titles[] = { " EMail ", " File ", " Message ", " Folder ", " Options " };
 static const MITEM *drops[] = { m_desk, m_file, m_msg, m_fold, m_opts };
 #define NTITLES 5
 
@@ -229,7 +229,7 @@ static void set_logging(void)
 {
 	conn_log_flush();
 	if (opt.log)
-		path_join(conn_logfile, sizeof(conn_logfile), opt.workdir, "MAIL.LOG");
+		path_join(conn_logfile, sizeof(conn_logfile), opt.workdir, "EMAIL.LOG");
 	else
 		conn_logfile[0] = 0;
 }
@@ -295,7 +295,7 @@ void cmd_check_all(void)
 	char server[160], errs[200] = "";
 	str_copy(server, cur_finfo ? cur_finfo->server : "", sizeof(server));
 	if (opt.offline) {
-		alert(1, "[1][MAIL is working offline.|Switch it off in the Options|menu to check mail.][ OK ]");
+		alert(1, "[1][EMail is working offline.|Switch it off in the Options|menu to check mail.][ OK ]");
 		return;
 	}
 	busy(1);
@@ -513,7 +513,7 @@ static void cmd_accounts(void)
 	}
 	if (!a) {
 		if (naccts >= MAXACCT)
-			alert(1, "[1][MAIL has room for %d accounts.][ OK ]", MAXACCT);
+			alert(1, "[1][EMail has room for %d accounts.][ OK ]", MAXACCT);
 		return;
 	}
 	r = (short)dlg_account(a);
@@ -668,7 +668,7 @@ static void do_quit(void)
 	quit = 1;
 }
 
-/* closing the main window ends MAIL */
+/* closing the main window ends EMail */
 void main_closed(void);
 void main_closed(void)
 {
@@ -782,7 +782,7 @@ static void command(short cmd)
 }
 
 /* ---------------- Falcon mode ----------------
- * On: MAIL talks TLS to the providers itself (BearSSL on the 68030, RSA
+ * On: EMail talks TLS to the providers itself (BearSSL on the 68030, RSA
  * signatures on the DSP). Off: plain, through the Raspberry Pi gateway.
  * Each account keeps both sets of servers. */
 short dlg_falcon;
@@ -797,7 +797,7 @@ int falcon_mode_set(int on)
 			return 0;
 		}
 		if (!pf_exists(conn_cacert)) {
-			alert(1, "[3][Falcon mode needs the root|certificates: put CACERT.PEM|next to MAIL.PRG. Get it|from curl.se/docs/caextract|or from MAIL's GitHub page.][ OK ]");
+			alert(1, "[3][Falcon mode needs the root|certificates: put CACERT.PEM|next to EMAIL.PRG. Get it|from curl.se/docs/caextract|or from EMail's GitHub page.][ OK ]");
 			return 0;
 		}
 		missing[0] = 0;
@@ -894,7 +894,7 @@ static void place_windows(void)
 	}
 }
 
-/* the folder MAIL.PRG was started from */
+/* the folder EMAIL.PRG was started from */
 static void work_dir(char *out, int size)
 {
 	char path[160];
@@ -959,13 +959,13 @@ int main(void)
 	reader_clear();
 
 	if (!naccts) {
-		alert(1, "[1][Welcome to MAIL!||Let's set up your mail account.][ OK ]");
+		alert(1, "[1][Welcome to EMail!||Let's set up your mail account.][ OK ]");
 		cmd_accounts();
 	} else {
 		/* check mail at start, then open the first inbox */
 		FINFO *in;
 		if (store_lost_passwords)
-			alert(1, "[1][MAIL.KEY is missing or new: type the passwords again in Options > Accounts.][ OK ]");
+			alert(1, "[1][EMAIL.KEY is missing or new: type the passwords again in Options > Accounts.][ OK ]");
 		if (!opt.offline)
 			cmd_check_all();
 		in = folder_role(accts[0], FR_INBOX);

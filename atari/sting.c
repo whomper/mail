@@ -6,7 +6,7 @@
  * Pure C cdecl: 16-bit arguments on the stack, result in d0, so every
  * call goes through sting_call() in sting.S.
  *
- * From Claude ST (whomper/atari_claude); MAIL adds resolve().
+ * From Claude ST (whomper/atari_claude); EMail adds resolve().
  */
 #include <string.h>
 #include "tos.h"

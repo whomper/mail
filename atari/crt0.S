@@ -1,4 +1,4 @@
-| MAIL TOS startup (from Claude ST, whomper/atari_claude).
+| EMail TOS startup (from Claude ST, whomper/atari_claude).
 | TOS enters with 4(sp) = basepage. We give memory we don't need back
 | to GEMDOS (Mshrink), move the stack into our own BSS, run main() and
 | terminate with its return value.

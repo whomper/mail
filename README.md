@@ -1,6 +1,6 @@
-# MAIL
+# EMail
 
-<img src="docs/icon16.png" width="96" align="right" alt="MAIL icon: an Atari SM124-style monitor showing an envelope">
+<img src="docs/icon16.png" width="96" align="right" alt="EMail icon: an Atari SM124-style monitor showing an envelope">
 
 An e-mail program for the Atari ST, STE, TT and Falcon, written in C for
 GEM. It reads mail over IMAP or POP3, sends it over SMTP, keeps a mirror
@@ -26,24 +26,24 @@ writes Hebrew.
 - Runs on TOS 1.04 to 4.x, EmuTOS, MagiC and MiNT, with STinG or
   MiNTnet; from a 68000 ST in medium resolution to a Falcon in 640×480
 
-Mail providers want encrypted connections. MAIL reaches them one of two
+Mail providers want encrypted connections. EMail reaches them one of two
 ways, switched with Options > Falcon mode:
 
 ```
-off (default):  Atari (MAIL.PRG) --STinG/MiNTnet--> Raspberry Pi (stunnel) --TLS--> provider
-on:             Falcon (MAIL.PRG, TLS 1.2, RSA on the DSP) --STinG/MiNTnet--TLS--> provider
+off (default):  Atari (EMAIL.PRG) --STinG/MiNTnet--> Raspberry Pi (stunnel) --TLS--> provider
+on:             Falcon (EMAIL.PRG, TLS 1.2, RSA on the DSP) --STinG/MiNTnet--TLS--> provider
 ```
 
 - **Off**, on any Atari: a Raspberry Pi on your network does the
   encryption, see [gateway/README.md](gateway/README.md). A server that
   accepts plain connections can be used directly.
-- **On**, on a Falcon or TT with 4 MB or more: MAIL does TLS 1.2 itself
+- **On**, on a Falcon or TT with 4 MB or more: EMail does TLS 1.2 itself
   with [BearSSL](https://bearssl.org/) (third_party/bearssl), built for
   the 68030, and the Falcon's DSP56001 checks the servers' RSA
   signatures. It needs `CACERT.PEM` and `ROOTS.DAT` (in this repository)
-  next to MAIL.PRG. See [Falcon mode](docs/GUIDE.md#falcon-mode).
+  next to EMAIL.PRG. See [Falcon mode](docs/GUIDE.md#falcon-mode).
 
-MAIL follows the design of Troll, the GFA-BASIC newsreader and mail
+EMail follows the design of Troll, the GFA-BASIC newsreader and mail
 client by Rajah Lone: the same four windows (folders, message list,
 message, editor), IMAP mirroring, and STinG or MiNTnet networking. It
 reuses parts of Claude ST
@@ -53,15 +53,15 @@ right-to-left layout and keyboard, and the Hatari test tools.
 
 ## Getting started
 
-1. Copy `MAIL.PRG` into a folder of its own on your Atari, e.g. `C:\MAIL\`.
+1. Copy `EMAIL.PRG` into a folder of its own on your Atari, e.g. `C:\EMAIL\`.
 2. Set up the gateway on a Raspberry Pi: `sudo gateway/install.sh
    imap.gmail.com smtp.gmail.com` (see [gateway/README.md](gateway/README.md)).
-3. Start MAIL and fill in your account: the Pi's IP address, ports 143
+3. Start EMail and fill in your account: the Pi's IP address, ports 143
    (IMAP) and 587 (SMTP), your login.
 
-Or, on a Falcon or TT with 4 MB: copy `MAIL.PRG`, `CACERT.PEM` and
+Or, on a Falcon or TT with 4 MB: copy `EMAIL.PRG`, `CACERT.PEM` and
 `ROOTS.DAT` into the folder, skip the Pi, and switch on Options > Falcon
-mode; MAIL fills in the servers for the big providers.
+mode; EMail fills in the servers for the big providers.
 
 The [user guide](docs/GUIDE.md) describes everything else.
 
@@ -69,7 +69,7 @@ The [user guide](docs/GUIDE.md) describes everything else.
 
 ```
 sudo apt install gcc-m68k-linux-gnu      # Debian/Ubuntu
-make                                     # writes MAIL.PRG and ROOTS.DAT
+make                                     # writes EMAIL.PRG and ROOTS.DAT
 ```
 
 No MiNTLib is needed: the program is freestanding (`atari/`) and
@@ -93,7 +93,7 @@ ui/      the GEM program: windows, drawing, editor, dialogs, menus
 gateway/ the Raspberry Pi gateway (stunnel)
 tests/   unit and integration tests, the Hatari test rig
 tools/   elf2tos.py, the icon generator, FAKESTNG.PRG (for testing in Hatari only)
-icons/   MAIL's desktop icon (RSC and ICN files)
+icons/   EMail's desktop icon (RSC and ICN files)
 ```
 
 ## Tests
@@ -105,13 +105,13 @@ real servers before it runs on the Atari:
 make test           # charsets (Hebrew), MIME, message building, bidi
 make itest          # IMAP, POP3, SMTP against a local Dovecot and a test SMTP server
 TLS=1 make itest    # the same through the gateway's stunnel set-up, TLS-only servers
-FALCON=1 make itest # Falcon mode: MAIL's own TLS, implicit TLS and STARTTLS
+FALCON=1 make itest # Falcon mode: EMail's own TLS, implicit TLS and STARTTLS
 ```
 
 `make itest` needs `dovecot-imapd` and `dovecot-pop3d`; `TLS=1` also
 needs `stunnel4`.
 
-`tests/hatari/` runs MAIL.PRG itself in the
+`tests/hatari/` runs EMAIL.PRG itself in the
 [Hatari](https://hatari.tuxfamily.org/) emulator with
 [EmuTOS](https://emutos.sourceforge.io/), with Xvfb and xdotool:
 
@@ -122,9 +122,9 @@ tests/hatari/ui_tour.py WORKDIR etos512us.img          # screenshots of the inte
 tests/hatari/falcon_test.py /tmp/mail-tls etos512us.img --dsp emu   # Falcon mode, TLS + DSP
 ```
 
-`net_test.py` boots an emulated Falcon, where MAIL logs in to Dovecot,
+`net_test.py` boots an emulated Falcon, where EMail logs in to Dovecot,
 mirrors the inbox, opens a Hebrew message and sends a Hebrew reply; the
 test checks the reply and its copy in Sent on the server. Hatari has no
-network card, so `FAKESTNG.PRG` stands in for STinG and carries MAIL's
+network card, so `FAKESTNG.PRG` stands in for STinG and carries EMail's
 connections over the emulated serial port to `serial_bridge.py`. It's
 for the emulator only; never install it on a real Atari.

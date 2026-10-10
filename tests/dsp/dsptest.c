@@ -1,5 +1,5 @@
 /*
- * DSPTEST - checks MAIL's RSA on the DSP56001 (dsp/rsa.a56 through
+ * DSPTEST - checks EMail's RSA on the DSP56001 (dsp/rsa.a56 through
  * atari/dsprsa.c) against answers worked out in Python, and times it.
  */
 #include <stdarg.h>

@@ -1,6 +1,6 @@
 /*
  * gem.h - minimal AES/VDI bindings (no GEMlib needed).
- * From Claude ST (whomper/atari_claude), extended for MAIL's dialogs.
+ * From Claude ST (whomper/atari_claude), extended for EMail's dialogs.
  */
 #ifndef GEM_H
 #define GEM_H

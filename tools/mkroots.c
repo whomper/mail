@@ -1,6 +1,6 @@
 /*
  * mkroots.c - decodes CACERT.PEM into ROOTS.DAT on this computer, the
- * same file MAIL writes the first time it connects in Falcon mode. It
+ * same file EMail writes the first time it connects in Falcon mode. It
  * ships next to CACERT.PEM so the Falcon never has to do the slow part
  * (well over a minute on a 16 MHz machine).
  *

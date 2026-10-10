@@ -11,7 +11,7 @@
 #include "util.h"
 
 #include "version.h"
-#define VERSION_UA "MAIL/" MAIL_VERSION " (Atari ST/TT/Falcon)"
+#define VERSION_UA "EMail/" MAIL_VERSION " (Atari ST/TT/Falcon)"
 
 int addr_list(const char *s, char out[][160], int max)
 {

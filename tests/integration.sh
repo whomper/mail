@@ -1,14 +1,14 @@
 #!/bin/bash
-# Integration test of MAIL's mail core against a real IMAP/POP3 server
+# Integration test of EMail's mail core against a real IMAP/POP3 server
 # (Dovecot) and an SMTP server, all on localhost. Needs dovecot-imapd and
 # dovecot-pop3d installed; run with `make itest`.
 #
 # TLS=1 runs the same tests through the Raspberry Pi gateway set-up: the
 # servers only speak TLS (IMAPS, POP3S, SMTP on 465 style) and stunnel,
-# configured like gateway/install.sh does, offers the plain ports MAIL
+# configured like gateway/install.sh does, offers the plain ports EMail
 # uses. Needs stunnel4 and openssl.
 #
-# FALCON=1 tests Falcon mode: MAIL speaks TLS itself (BearSSL), to the
+# FALCON=1 tests Falcon mode: EMail speaks TLS itself (BearSSL), to the
 # TLS-only ports (IMAP and SMTP of the first account) and with STARTTLS
 # on the plain ports (POP3 STLS and SMTP STARTTLS of the second).
 set -u
@@ -92,7 +92,7 @@ cp "$ROOT"/tests/mail/*.eml "$D/home/dana/Maildir/new/"
 chown -R nobody: "$D/home"   # Dovecot won't serve mail as root
 
 W=$D/work
-cat > "$W/MAIL.INF" <<INF
+cat > "$W/EMAIL.INF" <<INF
 [options]
 tz=180
 headers=300
@@ -121,10 +121,10 @@ smtphost=127.0.0.1
 smtpport=$SMTP
 INF
 if [ -n "${FALCON:-}" ]; then
-  # Falcon mode: MAIL talks TLS to the servers itself; the test
+  # Falcon mode: EMail talks TLS to the servers itself; the test
   # certificate is the only root it trusts
   cp "$D/cert.pem" "$W/CACERT.PEM"
-  python3 - "$W/MAIL.INF" $((IMAP + 850)) $S_SMTP $POP3 $SMTP <<'PY'
+  python3 - "$W/EMAIL.INF" $((IMAP + 850)) $S_SMTP $POP3 $SMTP <<'PY'
 import sys
 p, imaps, smtps, pop3, smtp = sys.argv[1:]
 s = open(p).read()
@@ -176,8 +176,8 @@ expect "flag stored on the server and synced back" "^$U1	 !" "$out"
 # not connected: what is cached still reads, a message that isn't says
 # why, and read/flag changes wait for the next connection
 U2=$(uid_of "$out" "מכתב")
-cp "$W/MAIL.INF" "$W/MAIL.INF.net"
-python3 - "$W/MAIL.INF" <<'PY'
+cp "$W/EMAIL.INF" "$W/EMAIL.INF.net"
+python3 - "$W/EMAIL.INF" <<'PY'
 import re, sys
 p = sys.argv[1]
 s = open(p, newline="").read()
@@ -192,7 +192,7 @@ expect "not connected: a cached message still reads" "שלום 1990" "$out"
 out=$(run flag 1 INBOX "$U1" -seen)
 out=$(run show 1 INBOX "$U2")
 expect "not connected: an uncached message says why" "not connected\|can't connect\|refused" "$out"
-cp "$W/MAIL.INF.net" "$W/MAIL.INF"
+cp "$W/EMAIL.INF.net" "$W/EMAIL.INF"
 run sync 1 INBOX >/dev/null
 srv=$(python3 - $IMAP "$U1" <<'PY'
 import imaplib, sys
@@ -215,7 +215,7 @@ Bcc: dana@test.local
 Subject: תשובה from the Falcon
 
 שלום דנה,
-this was written in MAIL.
+this was written in EMail.
 .a line starting with a dot
 MSG
 out=$(run send 1 "$W/msg.txt")
@@ -315,17 +315,17 @@ if [ -n "${FALCON:-}" ]; then
   expect "message sent with SMTP STARTTLS" "sent: 1" "$out"
 
   # IMAP STARTTLS on the plain port
-  cp "$W/MAIL.INF" "$W/MAIL.INF.keep"
-  sed -i "0,/^dport=.*/s//dport=$IMAP/; 0,/^dsec=1/s//dsec=2/" "$W/MAIL.INF"
+  cp "$W/EMAIL.INF" "$W/EMAIL.INF.keep"
+  sed -i "0,/^dport=.*/s//dport=$IMAP/; 0,/^dsec=1/s//dsec=2/" "$W/EMAIL.INF"
   out=$(run folders 1)
   expect "IMAP STARTTLS" "^Sent " "$out"
-  grep -q "^IMAP >> T[0-9]* STARTTLS" "$W/MAIL.LOG" && { PASS=$((PASS+1)); echo "ok   IMAP sent STARTTLS"; } || { FAIL=$((FAIL+1)); echo "FAIL IMAP STARTTLS not in the log"; }
-  cp "$W/MAIL.INF.keep" "$W/MAIL.INF"
+  grep -q "^IMAP >> T[0-9]* STARTTLS" "$W/EMAIL.LOG" && { PASS=$((PASS+1)); echo "ok   IMAP sent STARTTLS"; } || { FAIL=$((FAIL+1)); echo "FAIL IMAP STARTTLS not in the log"; }
+  cp "$W/EMAIL.INF.keep" "$W/EMAIL.INF"
 
   # Falcon mode has its own password: a wrong one there fails in words,
   # and the log shows the login's shape but not the login
-  cp "$W/MAIL.INF" "$W/MAIL.INF.keep"
-  python3 - "$W/MAIL.INF" <<'PY'
+  cp "$W/EMAIL.INF" "$W/EMAIL.INF.keep"
+  python3 - "$W/EMAIL.INF" <<'PY'
 import sys
 p = sys.argv[1]
 s = open(p, newline="").read()
@@ -335,11 +335,11 @@ open(p, "w", newline="").write(s)
 PY
   out=$(run folders 1)
   expect "wrong Falcon-mode password refused, in words" "refused the user name or password" "$out"
-  grep -q "^IMAP -- logging in: user name 4 characters without @, password 10 characters (1 '-'" "$W/MAIL.LOG" \
+  grep -q "^IMAP -- logging in: user name 4 characters without @, password 10 characters (1 '-'" "$W/EMAIL.LOG" \
     && { PASS=$((PASS+1)); echo "ok   login shape in the log"; } || { FAIL=$((FAIL+1)); echo "FAIL no login shape in the log"; }
-  grep -q "wrong-pass" "$W/MAIL.LOG" && { FAIL=$((FAIL+1)); echo "FAIL password in the log"; } || { PASS=$((PASS+1)); echo "ok   password not in the log"; }
-  grep -q "^pass=secret" "$W/MAIL.INF" && { PASS=$((PASS+1)); echo "ok   the gateway's password kept apart"; } || { FAIL=$((FAIL+1)); echo "FAIL gateway password changed"; }
-  cp "$W/MAIL.INF.keep" "$W/MAIL.INF"
+  grep -q "wrong-pass" "$W/EMAIL.LOG" && { FAIL=$((FAIL+1)); echo "FAIL password in the log"; } || { PASS=$((PASS+1)); echo "ok   password not in the log"; }
+  grep -q "^pass=secret" "$W/EMAIL.INF" && { PASS=$((PASS+1)); echo "ok   the gateway's password kept apart"; } || { FAIL=$((FAIL+1)); echo "FAIL gateway password changed"; }
+  cp "$W/EMAIL.INF.keep" "$W/EMAIL.INF"
 
   # a server whose certificate no trusted authority signed
   openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=other -keyout "$D/k2.pem" -out "$D/c2.pem" 2>/dev/null
@@ -355,23 +355,23 @@ PY
   cat "$D/ecc.pem" >> "$W/CACERT.PEM"
   python3 "$ROOT/tests/smtp_server.py" $((SMTP + 441)) "$D" dana secret "$D/ecc.pem" "$D/eck.pem" & SMTPPID="$SMTPPID $!"
   sleep 1
-  sed -i "0,/^dsmtpport=.*/s//dsmtpport=$((SMTP + 441))/" "$W/MAIL.INF"
+  sed -i "0,/^dsmtpport=.*/s//dsmtpport=$((SMTP + 441))/" "$W/EMAIL.INF"
   out=$(run send 1 "$W/msg.txt")
   expect "ECDSA-only server: sent after the retry" "sent: 1" "$out"
-  grep -q "^SMTP -- secure: TLS 1.2, ECDHE-ECDSA" "$W/MAIL.LOG" && { PASS=$((PASS+1)); echo "ok   ECDSA certificate accepted on the second try"; } || { FAIL=$((FAIL+1)); echo "FAIL no ECDSA session"; }
-  cp "$W/MAIL.INF.keep" "$W/MAIL.INF"
-  # every protocol went over MAIL's own TLS, both ways of starting it
+  grep -q "^SMTP -- secure: TLS 1.2, ECDHE-ECDSA" "$W/EMAIL.LOG" && { PASS=$((PASS+1)); echo "ok   ECDSA certificate accepted on the second try"; } || { FAIL=$((FAIL+1)); echo "FAIL no ECDSA session"; }
+  cp "$W/EMAIL.INF.keep" "$W/EMAIL.INF"
+  # every protocol went over EMail's own TLS, both ways of starting it
   for p in IMAP POP3 SMTP; do
-    if grep -q "^$p -- secure: TLS 1.2" "$W/MAIL.LOG" 2>/dev/null; then PASS=$((PASS+1)); echo "ok   $p over TLS: $(grep -m1 "^$p -- secure" "$W/MAIL.LOG" | cut -c17-)"
+    if grep -q "^$p -- secure: TLS 1.2" "$W/EMAIL.LOG" 2>/dev/null; then PASS=$((PASS+1)); echo "ok   $p over TLS: $(grep -m1 "^$p -- secure" "$W/EMAIL.LOG" | cut -c17-)"
     else FAIL=$((FAIL+1)); echo "FAIL $p not over TLS"; fi
   done
-  if grep -q "^IMAP >> T[0-9]* STARTTLS\|^POP3 >> STLS" "$W/MAIL.LOG" && grep -q "^SMTP >> STARTTLS" "$W/MAIL.LOG"; then
+  if grep -q "^IMAP >> T[0-9]* STARTTLS\|^POP3 >> STLS" "$W/EMAIL.LOG" && grep -q "^SMTP >> STARTTLS" "$W/EMAIL.LOG"; then
     PASS=$((PASS+1)); echo "ok   STARTTLS used where asked"
   else FAIL=$((FAIL+1)); echo "FAIL STARTTLS not used"; fi
-  if grep -q " >> .*\(LOGIN\|AUTH\|PASS\)" "$W/MAIL.LOG" && ! grep -q "secret" "$W/MAIL.LOG"; then
+  if grep -q " >> .*\(LOGIN\|AUTH\|PASS\)" "$W/EMAIL.LOG" && ! grep -q "secret" "$W/EMAIL.LOG"; then
     PASS=$((PASS+1)); echo "ok   password not in the log"
   else FAIL=$((FAIL+1)); echo "FAIL password check in the log"; fi
-  [ -s "$W/MAIL/SEED.DAT" ] && { PASS=$((PASS+1)); echo "ok   random seed kept"; } || { FAIL=$((FAIL+1)); echo "FAIL no random seed"; }
+  [ -s "$W/EMAIL/SEED.DAT" ] && { PASS=$((PASS+1)); echo "ok   random seed kept"; } || { FAIL=$((FAIL+1)); echo "FAIL no random seed"; }
 fi
 echo "$PASS passed, $FAIL failed"
 [ $FAIL -eq 0 ]

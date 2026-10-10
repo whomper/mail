@@ -1,6 +1,6 @@
 /*
  * gem.c - minimal AES/VDI bindings.
- * From Claude ST (whomper/atari_claude), extended for MAIL's dialogs.
+ * From Claude ST (whomper/atari_claude), extended for EMail's dialogs.
  */
 #include "tos.h"
 #include "gem.h"

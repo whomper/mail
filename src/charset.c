@@ -238,7 +238,7 @@ static int looks_atari_hebrew(const u8 *s, long n, int cs)
 
 /* Such a bridge also turns each Hebrew line around for programs without
  * a bidi layout of their own, so it shows the right way round from left
- * to right. MAIL lays Hebrew out itself, so the lines are turned back
+ * to right. EMail lays Hebrew out itself, so the lines are turned back
  * into reading order first. The paragraph's direction is the one most
  * of its letters have: in display order the first letter may well be
  * the Latin word that ended a Hebrew sentence. */

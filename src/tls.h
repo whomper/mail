@@ -15,7 +15,7 @@ typedef struct TLS TLS;
 
 /* the local time zone, minutes east of UTC, for certificate dates */
 extern int tls_tz_minutes;
-/* where the random seed is kept between sessions (MAIL\\SEED.DAT) */
+/* where the random seed is kept between sessions (EMAIL\\SEED.DAT) */
 extern char tls_seed_path[200];
 /* the decoded root certificates are kept here (ROOTS.DAT, next to CACERT.PEM) */
 extern char tls_roots_cache[200];

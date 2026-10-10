@@ -6,7 +6,7 @@
  *
  * The first time, the DSP works out a known answer (a 1024-bit number
  * cubed, checked in Python when this file was made); if it ever gets it
- * wrong, MAIL leaves the DSP alone for the rest of the session.
+ * wrong, EMail leaves the DSP alone for the rest of the session.
  */
 #include <string.h>
 #include <stdio.h>

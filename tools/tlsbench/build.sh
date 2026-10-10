@@ -2,7 +2,7 @@
 # Builds the TLS measurements for the Falcon:
 #   TLSB030.PRG  BearSSL 0.6 on the 68030: each piece of a TLS handshake
 #   TLSDSP.PRG   Montgomery multiplication on the DSP56001 (2048 and 256 bits)
-# Needs: gcc-m68k-linux-gnu, a56 (apt install a56), python3, MAIL built
+# Needs: gcc-m68k-linux-gnu, a56 (apt install a56), python3, EMail built
 # (make) for its runtime, and BearSSL 0.6: by default the copy inside
 # github.com/arduino-libraries/ArduinoBearSSL (src/bearssl), fetched here.
 set -e

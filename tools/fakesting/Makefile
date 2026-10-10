@@ -1,5 +1,5 @@
 # FAKESTNG.PRG: a stand-in for STinG that tunnels TCP over the serial
-# port, for testing MAIL in Hatari (see fakesting.c). Not for real use.
+# port, for testing EMail in Hatari (see fakesting.c). Not for real use.
 CROSS  ?= m68k-linux-gnu-
 CC     := $(CROSS)gcc
 GCCINC := $(shell $(CC) -print-file-name=include)

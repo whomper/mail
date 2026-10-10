@@ -1,5 +1,5 @@
 /*
- * ui.h - MAIL's GEM interface: four windows like the GFA Troll
+ * ui.h - EMail's GEM interface: four windows like the GFA Troll
  * (folders, message list, message, editor), a menu bar and dialogs.
  */
 #ifndef UI_H

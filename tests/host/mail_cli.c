@@ -1,5 +1,5 @@
 /*
- * mail_cli.c - drives MAIL's mail core from a terminal, for the
+ * mail_cli.c - drives EMail's mail core from a terminal, for the
  * integration tests (tests/integration.sh). Not part of the Atari
  * program; text is printed as UTF-8.
  *
@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 	store_init(argv[1]);
 	atexit(conn_log_flush);		/* every way out, error returns too */
 	if (getenv("MAIL_LOG")) {
-		path_join(conn_logfile, sizeof(conn_logfile), argv[1], "MAIL.LOG");
+		path_join(conn_logfile, sizeof(conn_logfile), argv[1], "EMAIL.LOG");
 	}
 	net_init();
 	mail_status = st;

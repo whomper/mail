@@ -1,5 +1,5 @@
 /*
- * FAKESTNG.PRG - a stand-in for the STinG TCP/IP stack, for testing MAIL
+ * FAKESTNG.PRG - a stand-in for the STinG TCP/IP stack, for testing EMail
  * in an emulator that has no network card (Hatari). It installs a "STiK"
  * cookie and a TRANSPORT_TCPIP table whose connections are tunnelled over
  * the serial port to tests/hatari/serial_bridge.py, which makes the real
@@ -226,6 +226,6 @@ long fake_install(long *basepage)
 		trap14_ww(44, 6);			/* Bconmap(6) */
 	io = Iorec(0);
 	Supexec(sup_install);
-	Cconws("Fake STinG for MAIL installed (TCP over serial)\r\n");
+	Cconws("Fake STinG for EMail installed (TCP over serial)\r\n");
 	return 0x100 + basepage[3] + basepage[5] + basepage[7];
 }

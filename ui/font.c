@@ -1,11 +1,11 @@
 /*
- * font.c - the font for the text in MAIL's windows (Options > Font).
+ * font.c - the font for the text in EMail's windows (Options > Font).
  *
  * The font selector looks like the ones in other GEM programs: the font
  * families in a list on the left, the sizes of the chosen one next to
  * it, what kind of font it is, and a sample. The system font comes in
  * two sizes; with a GDOS (NVDI, SpeedoGDOS, FontGDOS...) its fonts are
- * listed too. MAIL lays text out in character cells, so it needs a
+ * listed too. EMail lays text out in character cells, so it needs a
  * monospaced font: a proportional one is shown light and can't be
  * chosen. Fonts are only looked at when picked, so the selector opens
  * at once even with hundreds of fonts installed.
@@ -325,7 +325,7 @@ static void draw_preview(void)
 		opt.hebfont = keep;
 	} else {
 		use_sys();
-		text_at(r.x + gl_wchar, r.y + 2, "Proportional: MAIL needs a fixed-width font.", 44,
+		text_at(r.x + gl_wchar, r.y + 2, "Proportional: EMail needs a fixed-width font.", 44,
 			(r.w - 2 * gl_wchar) / gl_wchar, TX_LTR);
 	}
 	use_sys();

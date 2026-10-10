@@ -8,7 +8,7 @@
 #include "store.h"
 
 extern char mail_err[200];
-/* the last call failed because MAIL works offline or the account is not
+/* the last call failed because EMail works offline or the account is not
    connected (see ACCOUNT.cut), not because of the message or folder */
 extern int mail_unreachable;
 /* the UI shows progress here (may be NULL) */

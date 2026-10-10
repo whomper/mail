@@ -5,7 +5,7 @@
  * program needs, loads it through the DSP's bootstrap and trades numbers
  * with it through the host port.
  *
- * The DSP is shared: it is locked with the XBIOS (Dsp_Lock) while MAIL
+ * The DSP is shared: it is locked with the XBIOS (Dsp_Lock) while EMail
  * uses it, and a busy or missing DSP just means the 68030 does the work.
  */
 #include <string.h>

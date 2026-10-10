@@ -208,7 +208,7 @@ static void t_compose(void)
 		 "Bcc: secret@example.net\n"
 		 "Subject: %s 1990\n"
 		 "\n"
-		 "%s, this is MAIL.\n.leading dot\n", shalom_atari, shalom_atari);
+		 "%s, this is EMail.\n.leading dot\n", shalom_atari, shalom_atari);
 	raw = compose_build(&a, text, strlen(text), "<abc@example.com>", "<abc@example.com>", err, sizeof(err), &n);
 	CHECK(raw != 0, "build: %s", err);
 	if (!raw)
@@ -221,7 +221,7 @@ static void t_compose(void)
 	CHECK(strstr(smtp, "Content-Transfer-Encoding: quoted-printable") != 0, "qp body");
 	m = mime_parse(smtp, sl);
 	CHECK(!strcmp(m->subject, "\xD6\xCD\xC7\xDA 1990"), "subject round trip [%s]", m->subject);
-	CHECK(strstr(m->text, "\xD6\xCD\xC7\xDA, this is MAIL.") != 0, "body round trip [%s]", m->text);
+	CHECK(strstr(m->text, "\xD6\xCD\xC7\xDA, this is EMail.") != 0, "body round trip [%s]", m->text);
 	CHECK(strstr(m->from, "Yaary \xC2") != 0, "from name round trip [%s]", m->from);
 	CHECK(strstr(m->to, "Cohen, Dana") != 0, "quoted name [%s]", m->to);
 	mime_free(m);
@@ -244,7 +244,7 @@ static void t_bidi(void)
 	CHECK(!memcmp(out, "1990 \xDA\xC7\xCD\xD6", 9), "bidi visual [%.9s]", out);
 }
 
-/* the root certificates shipped with MAIL load as BearSSL trust anchors */
+/* the root certificates shipped with EMail load as BearSSL trust anchors */
 static void t_tls(void)
 {
 	char err[200];
@@ -276,7 +276,7 @@ static void forget_accounts(void)
 		free(accts[--naccts]);
 }
 
-/* MAIL.INF: names in capitals, a note, the setting and an empty line;
+/* EMAIL.INF: names in capitals, a note, the setting and an empty line;
    read back the same, a password with " ;" and a two-line signature too */
 static void t_inf(void)
 {
@@ -286,13 +286,13 @@ static void t_inf(void)
 	int blank_after = 1;
 	snprintf(dir, sizeof(dir), "/tmp/mail-unit-inf.%d", (int)getpid());
 	mkdir(dir, 0755);
-	snprintf(path, sizeof(path), "%s/MAIL.INF", dir);
+	snprintf(path, sizeof(path), "%s/EMAIL.INF", dir);
 	{
 		static const char old[] = "[options]\r\ntz=180\r\n[account]\r\nname=Home\r\nemail=a@me.com\r\n"
 			"user=a\r\npass=x ;y\r\nsignature=Dana\\nTel Aviv\r\n";
 		pf_save(path, old, (long)strlen(old));
 	}
-	CHECK(store_init(dir) == 1, "old lower-case MAIL.INF read");
+	CHECK(store_init(dir) == 1, "old lower-case EMAIL.INF read");
 	CHECK(!strcmp(accts[0]->pass, "x ;y"), "password with ' ;' kept: %s", accts[0]->pass);
 	CHECK(store_save_settings() == 0, "settings saved");
 	inf = pf_load(path, &len);
@@ -312,16 +312,16 @@ static void t_inf(void)
 	store_init(dir);
 	a = accts[0];
 	CHECK(!strcmp(a->pass, "x ;y") && !strcmp(a->signature, "Dana\nTel Aviv") && opt.tz == 180,
-	      "read back from the new MAIL.INF");
-	CHECK(!store_lost_passwords, "MAIL.KEY opens them");
-	/* another key: the password is gone, and MAIL says so */
+	      "read back from the new EMAIL.INF");
+	CHECK(!store_lost_passwords, "EMAIL.KEY opens them");
+	/* another key: the password is gone, and EMail says so */
 	{
 		char kf[120];
-		snprintf(kf, sizeof(kf), "%s/MAIL.KEY", dir);
+		snprintf(kf, sizeof(kf), "%s/EMAIL.KEY", dir);
 		unlink(kf);
 		forget_accounts();
 		store_init(dir);
-		CHECK(store_lost_passwords && !accts[0]->pass[0], "a new MAIL.KEY can't open the old passwords");
+		CHECK(store_lost_passwords && !accts[0]->pass[0], "a new EMAIL.KEY can't open the old passwords");
 		unlink(kf);
 	}
 	{
@@ -341,10 +341,47 @@ static void t_inf(void)
 	rmdir(dir);
 }
 
+/* an installation from when the program was MAIL.PRG: its files are
+   taken along, the encrypted password still opens */
+static void t_rename(void)
+{
+	char dir[64], p1[120], p2[120], sealed[300];
+	snprintf(dir, sizeof(dir), "/tmp/mail-unit-old.%d", (int)getpid());
+	mkdir(dir, 0755);
+	snprintf(p1, sizeof(p1), "%s/MAIL.KEY", dir);
+	secret_init(p1);
+	secret_encode("s3cret", sealed, sizeof(sealed));
+	snprintf(p1, sizeof(p1), "%s/MAIL.INF", dir);
+	{
+		char inf[400];
+		snprintf(inf, sizeof(inf), "[OPTIONS]\r\nTZ=120\r\n[ACCOUNT]\r\nNAME=Home\r\nUSER=a\r\nPASS=%s\r\n", sealed);
+		pf_save(p1, inf, (long)strlen(inf));
+	}
+	snprintf(p1, sizeof(p1), "%s/MAIL", dir);
+	mkdir(p1, 0755);
+	forget_accounts();
+	CHECK(store_init(dir) == 1, "old MAIL.INF found");
+	CHECK(!store_lost_passwords && !strcmp(accts[0]->pass, "s3cret"), "old MAIL.KEY still opens the password");
+	snprintf(p1, sizeof(p1), "%s/EMAIL.INF", dir);
+	snprintf(p2, sizeof(p2), "%s/EMAIL.KEY", dir);
+	CHECK(pf_exists(p1) && pf_exists(p2), "renamed to EMAIL.INF and EMAIL.KEY");
+	snprintf(p1, sizeof(p1), "%s/EMAIL", dir);
+	CHECK(pf_exists(p1), "the MAIL folder is now EMAIL");
+	forget_accounts();
+	unlink(p2);
+	snprintf(p2, sizeof(p2), "%s/EMAIL.INF", dir);
+	unlink(p2);
+	snprintf(p2, sizeof(p2), "%s/EMAIL/ACCT1", dir);
+	rmdir(p2);
+	rmdir(p1);
+	rmdir(dir);
+}
+
 int main(void)
 {
 	t_num();
 	t_inf();
+	t_rename();
 	t_charset();
 	t_mime();
 	t_compose();

@@ -1,4 +1,4 @@
-/* MAIL freestanding libc: string functions */
+/* EMail freestanding libc: string functions */
 #ifndef _STRING_H
 #define _STRING_H
 #include <stddef.h>

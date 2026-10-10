@@ -1,6 +1,6 @@
 #!/bin/bash
 # Set up a Raspberry Pi (or any Debian/Ubuntu/Raspberry Pi OS computer)
-# as MAIL's secure-mail gateway: the Atari talks plain IMAP, POP3 and
+# as EMail's secure-mail gateway: the Atari talks plain IMAP, POP3 and
 # SMTP to the Pi on your home network, and the Pi talks TLS to your mail
 # provider, with stunnel.
 #
@@ -13,7 +13,7 @@
 #                   usual ones are taken (e.g. by another bridge):
 #   sudo ./install.sh --ports 1143,1025,1110 imap.gmail.com smtp.gmail.com
 #
-# Ports on the Pi, to type into MAIL's account dialog (unless --ports):
+# Ports on the Pi, to type into EMail's account dialog (unless --ports):
 #   IMAP 143   POP3 110   SMTP 587   (the standard ones)
 set -euo pipefail
 
@@ -52,8 +52,8 @@ apt-get install -y -qq stunnel4
 
 CONF=/etc/stunnel/atari-mail.conf
 cat > "$CONF" <<CONF
-; MAIL gateway: plain mail protocols from the Atari, TLS to the provider.
-; Written by MAIL's gateway/install.sh - run it again to change servers.
+; EMail gateway: plain mail protocols from the Atari, TLS to the provider.
+; Written by EMail's gateway/install.sh - run it again to change servers.
 ; in stunnel's own folder: it writes the file after becoming stunnel4
 pid = /run/stunnel4/atari-mail.pid
 setuid = stunnel4
@@ -138,7 +138,7 @@ done
 IP=$(hostname -I | awk '{print $1}')
 cat <<MSG
 
-The gateway is running. In MAIL's account dialog (Options > Accounts):
+The gateway is running. In EMail's account dialog (Options > Accounts):
 
   Incoming:  IMAP   Server: $IP   Port: $P_IMAP
 $( [ -n "$POP3" ] && echo "  (or POP3        Server: $IP   Port: $P_POP3)" )

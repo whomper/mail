@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Write MAIL's icons as files for Atari icon and resource editors
+"""Write EMail's icons as files for Atari icon and resource editors
 (adapted from Claude ST's make_rsc.py):
 
-  icons/MAIL.RSC      GEM resource, one tree: a monochrome G_ICON and a
+  icons/EMAIL.RSC      GEM resource, one tree: a monochrome G_ICON and a
                       colour G_CICON (16 colours), each with its mask and the
-                      label "MAIL". Copy them into DESKICON.RSC /
+                      label "EMail". Copy them into DESKICON.RSC /
                       DESKCICN.RSC with a resource editor (Interface, ORCS,
                       RSM...).
-  icons/MAIL.ICN      the monochrome image, ICN text format
-  icons/MAILMK.ICN    its mask, ICN text format
+  icons/EMAIL.ICN      the monochrome image, ICN text format
+  icons/EMAILMK.ICN    its mask, ICN text format
 
 The colour icon uses the standard VDI colours (white, black, red, green,
 yellow, greys), since desktop icons can't bring their own palette.
@@ -61,7 +61,7 @@ PEN_TO_REG = [0, 15, 1, 2, 4, 6, 3, 5, 7, 8, 9, 10, 12, 14, 11, 13]
 colour = [[PEN_TO_REG[TO_STD[mi.col[y][x]]] for x in range(W)] for y in range(H)]
 col_planes = b"".join(plane([[(colour[y][x] >> p) & 1 for x in range(W)] for y in range(H)])
                       for p in range(4))
-TEXT = b"MAIL\0\0\0\0\0\0\0\0"     # 12 bytes, like every icon text
+TEXT = b"EMAIL\0\0\0\0\0\0\0"     # 12 bytes, like every icon text
 assert len(TEXT) == 12
 
 
@@ -146,7 +146,7 @@ hdr = struct.pack(">18H",
 os.makedirs(OUT, exist_ok=True)
 data = hdr + body + ext + ctab + ciconblk
 assert len(data) == total
-with open(os.path.join(OUT, "MAIL.RSC"), "wb") as f:
+with open(os.path.join(OUT, "EMAIL.RSC"), "wb") as f:
     f.write(data)
 
 
@@ -165,6 +165,6 @@ def write_icn(name, bits):
         f.write("\n};\n")
 
 
-write_icn("MAIL.ICN", mono)
-write_icn("MAILMK.ICN", mask)
-print("wrote", len(data), "byte MAIL.RSC and two ICN files to", os.path.normpath(OUT))
+write_icn("EMAIL.ICN", mono)
+write_icn("EMAILMK.ICN", mask)
+print("wrote", len(data), "byte EMAIL.RSC and two ICN files to", os.path.normpath(OUT))

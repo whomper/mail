@@ -343,7 +343,7 @@ static void load_more(void)
 	if (cur_finfo->local) {
 		shown += opt.page;
 	} else if (opt.offline || cur_acct->cut) {
-		alert(1, "[1][MAIL is not connected.|Older messages are on the server:|Check mail to connect again.][ OK ]");
+		alert(1, "[1][EMail is not connected.|Older messages are on the server:|Check mail to connect again.][ OK ]");
 		return;
 	} else {
 		busy(1);

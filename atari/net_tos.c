@@ -1,5 +1,5 @@
 /*
- * net_tos.c - TCP for MAIL on the Atari, like the GFA Troll does it:
+ * net_tos.c - TCP for EMail on the Atari, like the GFA Troll does it:
  *   - STinG / STiK (TOS, MagiC, or MiNT with GlueSTiK) through its TPL,
  *   - MiNTnet sockets (FreeMiNT, MagiC-Net) through GEMDOS calls.
  * Names are resolved with STinG when it is there, otherwise with a

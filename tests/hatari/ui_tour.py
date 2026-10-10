@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""A tour of MAIL.PRG in Hatari, saving a screenshot after each step.
+"""A tour of EMAIL.PRG in Hatari, saving a screenshot after each step.
 
     ui_tour.py WORKDIR EMUTOS.IMG
 
-WORKDIR/hd is the emulated drive C: with MAIL.PRG, MAIL.INF and MAIL\\
+WORKDIR/hd is the emulated drive C: with EMAIL.PRG, EMAIL.INF and EMAIL\\
 (for instance the mail folder left by `KEEP=1 make itest`, with
-offline=1 in MAIL.INF). Screenshots go to WORKDIR/shots.
+offline=1 in EMAIL.INF). Screenshots go to WORKDIR/shots.
 """
 import sys
 import time
@@ -47,7 +47,7 @@ try:
     for k in "akuo":
         r.key(SCAN[k])
     r.key(K["F10"])
-    r.type(" Dana, MAIL works on the Falcon 030!")
+    r.type(" Dana, EMail works on the Falcon 030!")
     time.sleep(0.8)
     r.shot("03-compose")
 

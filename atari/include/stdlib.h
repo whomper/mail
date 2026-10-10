@@ -1,4 +1,4 @@
-/* MAIL freestanding libc: memory and conversions */
+/* EMail freestanding libc: memory and conversions */
 #ifndef _STDLIB_H
 #define _STDLIB_H
 #include <stddef.h>

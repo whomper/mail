@@ -1,5 +1,5 @@
 /*
- * draw.c - text output for MAIL's windows. Text is kept in logical
+ * draw.c - text output for EMail's windows. Text is kept in logical
  * order; lines containing Hebrew go through bidi_visual() and, when the
  * paragraph is right-to-left, are aligned to the right edge.
  */

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A small SMTP submission server for MAIL's integration tests.
+"""A small SMTP submission server for EMail's integration tests.
 
 It speaks EHLO, AUTH PLAIN/LOGIN, MAIL, RCPT, DATA, RSET, QUIT and
 delivers each message into the Dovecot Maildir of a local test user
@@ -46,7 +46,7 @@ class H(socketserver.StreamRequestHandler):
         self.wfile.write(s.encode() + b"\r\n")
 
     def handle(self):
-        self.out("220 test.local ESMTP MAIL test server")
+        self.out("220 test.local ESMTP EMail test server")
         authed, rcpts, sender = False, [], None
         while True:
             line = self.rfile.readline()

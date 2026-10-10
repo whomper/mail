@@ -1,4 +1,4 @@
-"""Drive MAIL in the Hatari emulator: an X display (Xvfb), Hatari's
+"""Drive EMail in the Hatari emulator: an X display (Xvfb), Hatari's
 command FIFO for keys and screenshots, xdotool for the mouse.
 Adapted from Claude ST's recording rig (whomper/atari_claude).
 """
@@ -25,7 +25,7 @@ K = dict(RETURN=0x1c, ESC=0x01, TAB=0x0f, BACKSPACE=0x0e, DELETE=0x53, UP=0x48, 
 
 class Rig:
     def __init__(self, work, tos, machine="falcon", display=":99", serial=None, extra=(),
-                 auto="C:\\MAIL.PRG"):
+                 auto="C:\\EMAIL.PRG"):
         self.work, self.tos, self.display = work, tos, display
         self.env = dict(os.environ, DISPLAY=display, SDL_AUDIODRIVER="dummy")
         self.fifo = os.path.join(work, "cmd.fifo")

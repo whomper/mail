@@ -1,4 +1,4 @@
-# Dovecot for MAIL's integration tests (plain text on localhost only).
+# Dovecot for EMail's integration tests (plain text on localhost only).
 base_dir = @RUN@
 state_dir = @DIR@/state
 log_path = @DIR@/dovecot.log

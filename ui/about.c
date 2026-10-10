@@ -1,7 +1,7 @@
 /*
  * about.c - the About box, drawn like Claude ST's (whomper/atari_claude):
  * the icon, large, in colour when the screen has 16 colours or more, the
- * name and version, the credits, how MAIL is connected, the fine print.
+ * name and version, the credits, how EMail is connected, the fine print.
  */
 #include <string.h>
 #include <stdio.h>
@@ -204,7 +204,7 @@ void dlg_about(void)
 		draw_icon(dx + (dw - ICON_W * sx) / 2, y, sx, sy);
 	}
 	y += ih + lh / 2;
-	center(y, "MAIL", TX_BOLD);
+	center(y, "EMail", TX_BOLD);
 	{
 		/* underlined, like Claude ST's name */
 		short n = 4, x = dx + (dw - n * cw) / 2;

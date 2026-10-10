@@ -1,6 +1,6 @@
 /*
  * conn.h - a buffered, line-oriented TCP connection with timeouts and
- * an optional protocol log (MAIL.LOG), shared by IMAP, POP3 and SMTP.
+ * an optional protocol log (EMAIL.LOG), shared by IMAP, POP3 and SMTP.
  */
 #ifndef CONN_H
 #define CONN_H
