@@ -1125,6 +1125,63 @@ int mail_folder_create(ACCOUNT *a, const char *name)
 	return mail_refresh_folders(a);
 }
 
+int mail_folder_rename(ACCOUNT *a, FINFO *fi, const char *name, char *newserver, int size)
+{
+	char old[160], to[160], *m;
+	char delim;
+	size_t ol, pl = 0;
+	short i;
+	int r;
+	if (fi->local || fi->role || a->pop) {
+		str_copy(mail_err, "This folder can't be renamed.", sizeof(mail_err));
+		return 0;
+	}
+	if (!mail_connect(a))
+		return 0;
+	delim = a->im->delim ? a->im->delim : '/';
+	if (strchr(name, delim)) {
+		snprintf(mail_err, sizeof(mail_err), "A folder name can't contain \"%c\".", delim);
+		return 0;
+	}
+	m = atari_to_mutf7(name);
+	if (!m)
+		return 0;
+	str_copy(old, fi->server, sizeof(old));
+	ol = strlen(old);
+	/* it stays under its parent */
+	{
+		const char *last = strrchr(old, delim);
+		if (last)
+			pl = (size_t)(last - old) + 1;
+	}
+	snprintf(to, sizeof(to), "%.*s%s", (int)pl, old, m);
+	free(m);
+	if (!strcmp(to, old))
+		return 1;
+	r = imap_rename(a->im, old, to);
+	if (r <= 0)
+		return imap_failed(a, r);
+	a->im->selected[0] = 0;		/* the selected one may have been it */
+	/* the folder and its subfolders take the new name here too, and keep
+	   their cached messages */
+	for (i = 0; i < a->nfolders; i++) {
+		FINFO *g = &a->folders[i];
+		if (g->local)
+			continue;
+		if (!strcmp(g->server, old)) {
+			folder_set_server(g, to, delim);
+		} else if (!strncmp(g->server, old, ol) && g->server[ol] == delim) {
+			char sub[200];
+			snprintf(sub, sizeof(sub), "%s%s", to, g->server + ol);
+			folder_set_server(g, sub, delim);
+		}
+	}
+	folders_save(a);
+	if (newserver)
+		str_copy(newserver, to, size);
+	return mail_refresh_folders(a);
+}
+
 int mail_folder_delete(ACCOUNT *a, FINFO *fi)
 {
 	int r;

@@ -257,6 +257,14 @@ int main(int argc, char **argv)
 			return fail("mkdir");
 		printf("ok\n");
 		free(at);
+	} else if (!strcmp(cmd, "rename") && a && argc > 5) {
+		FINFO *fi = find_folder(a, argv[4]);
+		char *at = cs_to_atari(argv[5], strlen(argv[5]), CS_UTF8, 0);
+		char to[160];
+		if (!fi || !mail_folder_rename(a, fi, at, to, sizeof(to)))
+			return fail("rename");
+		printf("ok %s\n", to);
+		free(at);
 	} else if (!strcmp(cmd, "rmdir") && a && argc > 4) {
 		FINFO *fi = find_folder(a, argv[4]);
 		if (!fi || !mail_folder_delete(a, fi))

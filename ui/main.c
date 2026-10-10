@@ -58,7 +58,8 @@ static const MITEM m_msg[] = {
 };
 static const MITEM m_fold[] = {
 	{ "  Show folders        ", C_FOLDERS }, { "  Refresh folder list ", C_REFRESH },
-	{ "  New folder...       ", C_NEWFOLDER }, { "  Delete folder...    ", C_DELFOLDER }, { 0, 0 }
+	{ "  New folder...       ", C_NEWFOLDER }, { "  Rename folder...    ", C_RENFOLDER },
+	{ "  Delete folder...    ", C_DELFOLDER }, { 0, 0 }
 };
 static const MITEM m_opts[] = {
 	{ "  Accounts...         ", C_ACCOUNTS }, { "  Settings...         ", C_SETTINGS },
@@ -199,6 +200,7 @@ void menu_update(void)
 	enable(C_ABOOK, ed);
 	enable(C_NEWFOLDER, cur_acct && !cur_acct->pop);
 	enable(C_DELFOLDER, cur_finfo && !cur_finfo->local && !cur_finfo->role);
+	enable(C_RENFOLDER, cur_finfo && !cur_finfo->local && !cur_finfo->role && !cur_finfo->noselect);
 	menu_icheck(menu, find_item(C_OFFLINE), opt.offline);
 	menu_icheck(menu, find_item(C_FALCON), opt.falcon);
 	menu_icheck(menu, find_item(C_HEBREW), hebrew_kbd);
@@ -572,6 +574,31 @@ void cmd_new_folder(ACCOUNT *a)
 	folders_build();
 }
 
+void cmd_rename_folder(ACCOUNT *a, FINFO *fi)
+{
+	char name[48], server[160], to[160];
+	int was_cur;
+	if (!a || !fi || fi->local || fi->role)
+		return;
+	str_copy(name, fi->disp, sizeof(name));
+	if (!dlg_ask("Rename folder", "New name:", name, 40) || !strcmp(name, fi->disp))
+		return;
+	was_cur = fi == cur_finfo;
+	str_copy(server, cur_finfo ? cur_finfo->server : "", sizeof(server));
+	busy(1);
+	mail_err[0] = 0;
+	to[0] = 0;
+	if (!mail_folder_rename(a, fi, name, to, sizeof(to)) && mail_err[0])
+		alert(1, "[1][%s][ OK ]", mail_err);
+	busy(0);
+	/* the open folder is found again by its (perhaps new) name */
+	if (cur_acct == a)
+		refind_current(was_cur && to[0] ? to : server);
+	list_titles();
+	folders_build();
+	menu_update();
+}
+
 void cmd_delete_folder(ACCOUNT *a, FINFO *fi)
 {
 	char server[160];
@@ -748,6 +775,7 @@ static void command(short cmd)
 	}
 	case C_NEWFOLDER: cmd_new_folder(cur_acct); break;
 	case C_DELFOLDER: cmd_delete_folder(cur_acct, cur_finfo); break;
+	case C_RENFOLDER: cmd_rename_folder(cur_acct, cur_finfo); break;
 	case C_ACCOUNTS: cmd_accounts(); break;
 	case C_SETTINGS:
 		dlg_falcon = opt.falcon;

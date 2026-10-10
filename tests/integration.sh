@@ -257,6 +257,28 @@ out=$(run move 1 INBOX "$U1" "$SERVER")
 expect "move to the Hebrew folder" "ok" "$out"
 out=$(run sync 1 "$SERVER")
 expect "message is in the Hebrew folder" "synced: 1 total" "$out"
+U5=$(uid_of "$(run list 1 "$SERVER")" "שלום")
+run show 1 "$SERVER" "$U5" >/dev/null
+
+# rename it: the server has the new name only, the cache comes along
+out=$(run rename 1 "$SERVER" "Archive 2026")
+expect "rename a folder" "^ok Archive 2026" "$out"
+srv=$(python3 - $IMAP <<'PY'
+import imaplib, sys
+m = imaplib.IMAP4("127.0.0.1", int(sys.argv[1]))
+m.login("dana", "secret")
+print(" | ".join(l.decode() for l in m.list()[1]))
+PY
+)
+if grep -q '"Archive 2026"' <<<"$srv" && ! grep -q "&BdA" <<<"$srv"; then PASS=$((PASS+1)); echo "ok   renamed on the server"
+else FAIL=$((FAIL+1)); echo "FAIL rename on the server: $srv"; fi
+out=$(run list 1 "Archive 2026")
+expect "renamed folder keeps its cached messages" "שלום" "$out"
+out=$(run show 1 "Archive 2026" "$U5")
+expect "and their downloaded bodies" "שלום 1990" "$out"
+out=$(run rename 1 INBOX "Other")
+expect "Inbox can't be renamed" "can't be renamed" "$out"
+SERVER="Archive 2026"
 
 # a message expunged by another client disappears from the mirror
 doveadm -c "$D/dovecot.conf" expunge -u dana mailbox INBOX header Message-ID "cp1255@example.org" || echo "doveadm expunge failed"

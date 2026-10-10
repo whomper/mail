@@ -210,15 +210,16 @@ static void rclick(WIN *w, short mx, short my)
 		return;
 	}
 	{
-		const char *lab[6];
+		const char *lab[7];
 		int imap = !fi->local, can_delete = imap && !fi->role && !fi->noselect;
 		lab[0] = fi->noselect ? "~Open" : "Open";
 		lab[1] = imap && !fi->noselect ? "Check for new mail" : "~Check for new mail";
 		lab[2] = fi->noselect ? "~Mark all as read" : "Mark all as read";
 		lab[3] = "-";
 		lab[4] = a->pop ? "~New folder..." : "New folder...";
-		lab[5] = can_delete ? "Delete folder..." : "~Delete folder...";
-		r = popup(mx, my, lab, 6);
+		lab[5] = can_delete ? "Rename folder..." : "~Rename folder...";
+		lab[6] = can_delete ? "Delete folder..." : "~Delete folder...";
+		r = popup(mx, my, lab, 7);
 		switch (r) {
 		case 0:
 			folders_select(a, fi);
@@ -250,6 +251,9 @@ static void rclick(WIN *w, short mx, short my)
 			cmd_new_folder(a);
 			break;
 		case 5:
+			cmd_rename_folder(a, fi);
+			break;
+		case 6:
 			cmd_delete_folder(a, fi);
 			break;
 		}

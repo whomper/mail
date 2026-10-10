@@ -673,6 +673,14 @@ int imap_create(IMAP *im, const char *mbox)
 	return run(im, 0, 0, 0, "CREATE %s", q);
 }
 
+int imap_rename(IMAP *im, const char *from, const char *to)
+{
+	char q1[300], q2[300];
+	imap_quote(q1, sizeof(q1), from);
+	imap_quote(q2, sizeof(q2), to);
+	return run(im, 0, 0, 0, "RENAME %s %s", q1, q2);
+}
+
 int imap_delete(IMAP *im, const char *mbox)
 {
 	char q[300];

@@ -298,11 +298,14 @@ after quitting, the protocol log, and the keyboard EMail starts with.
 ## Folders
 
 Folder > New folder makes a folder on the IMAP server (Hebrew names
-work). Folder > Delete folder removes the open one with all its messages;
-right-click a folder to do this for any folder, or to mark all its
-messages as read.
-Folder > Refresh folder list reads the list again after you changed it
-elsewhere.
+work). Folder > Rename folder gives the open one a new name on the
+server; it stays under its parent, its subfolders move with it, and the
+messages already on disk stay with it. Inbox, Sent, Trash, Drafts and the
+Outbox keep their names. Folder > Delete folder removes the open one with
+all its messages. Right-click a folder to rename or delete any folder, or
+to mark all its messages as read.
+The folder list is read from the server when EMail starts; Folder >
+Refresh folder list reads it again after you changed it elsewhere.
 
 ## The desktop icon
 

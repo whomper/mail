@@ -517,6 +517,12 @@ static void folder_names(FINFO *f, char delim)
 	free(d);
 }
 
+void folder_set_server(FINFO *f, const char *server, char delim)
+{
+	str_copy(f->server, server, sizeof(f->server));
+	folder_names(f, delim);
+}
+
 FINFO *folder_add(ACCOUNT *a, const char *server, char delim, short role, short noselect, short local)
 {
 	FINFO *f = folder_find(a, server);
@@ -588,8 +594,9 @@ int folders_save(ACCOUNT *a)
 	sb_init(&b);
 	for (i = 0; i < a->nfolders; i++) {
 		FINFO *f = &a->folders[i];
-		sb_printf(&b, "%d\t%d\t%d\t%ld\t%ld\t%s\r\n", f->role, f->noselect, f->local,
-			  f->total, f->unread, f->server);
+		/* the cache directory too: a renamed folder keeps its own */
+		sb_printf(&b, "%d\t%d\t%d\t%ld\t%ld\t%s\t%s\r\n", f->role, f->noselect, f->local,
+			  f->total, f->unread, f->server, f->dir);
 	}
 	path_join(path, sizeof(path), a->dir, "FOLDERS.LST");
 	r = pf_save(path, b.s ? b.s : "", b.len);
@@ -616,7 +623,7 @@ int folders_load(ACCOUNT *a)
 	buf = pf_load(path, 0);
 	if (buf) {
 		for (line = buf; line && *line; line = next) {
-			char *f[6];
+			char *f[7];
 			short n = 0;
 			next = strchr(line, '\n');
 			if (next)
@@ -624,18 +631,21 @@ int folders_load(ACCOUNT *a)
 			if (*line && line[strlen(line) - 1] == '\r')
 				line[strlen(line) - 1] = 0;
 			f[n++] = line;
-			while (n < 6) {
+			while (n < 7) {
 				char *t = strchr(f[n - 1], '\t');
 				if (!t)
 					break;
 				*t = 0;
 				f[n++] = t + 1;
 			}
-			if (n == 6 && *f[5]) {
+			if (n >= 6 && *f[5]) {
 				FINFO *fi = folder_add(a, f[5], '/', (short)atoi(f[0]), (short)atoi(f[1]), (short)atoi(f[2]));
 				if (fi) {
 					fi->total = atol(f[3]);
 					fi->unread = atol(f[4]);
+					/* older lists have no directory: it follows from the name */
+					if (n == 7 && f[6][0] == 'F' && strlen(f[6]) < sizeof(fi->dir))
+						str_copy(fi->dir, f[6], sizeof(fi->dir));
 				}
 			}
 		}

@@ -40,7 +40,10 @@ int  mail_move(FOLDER *f, HDR *h, FINFO *dest);
 int  mail_queue(ACCOUNT *a, const char *raw, long len);	/* into the Outbox */
 int  mail_send_outbox(ACCOUNT *a, int *sent);
 
-int  mail_folder_create(ACCOUNT *a, const char *name);	/* Atari charset */
+int  mail_folder_create(ACCOUNT *a, const char *name);
+/* a new name (Atari text) under the same parent; newserver gets its name
+   on the server */
+int  mail_folder_rename(ACCOUNT *a, FINFO *fi, const char *name, char *newserver, int size);	/* Atari charset */
 int  mail_folder_delete(ACCOUNT *a, FINFO *fi);
 
 #endif

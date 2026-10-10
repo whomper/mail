@@ -147,6 +147,8 @@ int  folders_save(ACCOUNT *a);
 FINFO *folder_find(ACCOUNT *a, const char *server);
 FINFO *folder_role(ACCOUNT *a, short role);
 FINFO *folder_add(ACCOUNT *a, const char *server, char delim, short role, short noselect, short local);
+/* a new name on the server for a folder; its cache directory stays */
+void folder_set_server(FINFO *f, const char *server, char delim);
 void folder_path(ACCOUNT *a, FINFO *f, char *out, int size);
 
 /* header index of one folder */

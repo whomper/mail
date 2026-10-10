@@ -74,6 +74,7 @@ int imap_expunge(IMAP *im, const char *uidset);
 int imap_append(IMAP *im, const char *mbox, unsigned short flags, const char *data, long len);
 int imap_create(IMAP *im, const char *mbox);
 int imap_delete(IMAP *im, const char *mbox);
+int imap_rename(IMAP *im, const char *from, const char *to);
 int imap_noop(IMAP *im);
 
 /* "\"name\"" with escapes, into out */
