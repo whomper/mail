@@ -169,6 +169,8 @@ static int imap_failed(ACCOUNT *a, int r)
 {
 	if (r < 0) {
 		snprintf(mail_err, sizeof(mail_err), "%s: %s", a->name, a->im ? a->im->err : "connection lost");
+		if (a->im)
+			a->im->c->dead = 1;	/* gone: no LOGOUT into it */
 		mail_disconnect(a);
 	} else if (a->im) {
 		snprintf(mail_err, sizeof(mail_err), "%s: %s", a->name, a->im->err);
@@ -1125,6 +1127,30 @@ int mail_folder_create(ACCOUNT *a, const char *name)
 	return mail_refresh_folders(a);
 }
 
+/* is there a folder of this name on the server? */
+typedef struct {
+	const char *name;
+	int found;
+} FINDCTX;
+
+static void find_cb(void *ud, const char *name, char delim, int role, int noselect)
+{
+	FINDCTX *c = ud;
+	(void)delim;
+	(void)role;
+	(void)noselect;
+	if (!strcmp(name, c->name))
+		c->found = 1;
+}
+
+static int on_server(ACCOUNT *a, const char *name)
+{
+	FINDCTX c;
+	c.name = name;
+	c.found = 0;
+	return imap_list(a->im, find_cb, &c) > 0 && c.found;
+}
+
 int mail_folder_rename(ACCOUNT *a, FINFO *fi, const char *name, char *newserver, int size)
 {
 	char old[160], to[160], *m;
@@ -1158,9 +1184,27 @@ int mail_folder_rename(ACCOUNT *a, FINFO *fi, const char *name, char *newserver,
 	free(m);
 	if (!strcmp(to, old))
 		return 1;
+	/* some servers (iCloud) drop the connection when the folder being
+	   renamed is the selected one: select the Inbox, read-only, first */
+	if (!strcmp(a->im->selected, old) ||
+	    (!strncmp(a->im->selected, old, ol) && a->im->selected[ol] == delim)) {
+		r = imap_select(a->im, "INBOX", 1);
+		if (r < 0)
+			return imap_failed(a, r);
+	}
 	r = imap_rename(a->im, old, to);
-	if (r <= 0)
+	if (r < 0) {
+		/* the connection went: it may have been renamed all the same */
+		a->im->c->dead = 1;
+		mail_disconnect(a);
+		if (!mail_connect(a) || !on_server(a, to) || on_server(a, old)) {
+			snprintf(mail_err, sizeof(mail_err), "%s: the server closed the connection; "
+				 "the folder was not renamed", a->name);
+			return 0;
+		}
+	} else if (r == 0) {
 		return imap_failed(a, r);
+	}
 	a->im->selected[0] = 0;		/* the selected one may have been it */
 	/* the folder and its subfolders take the new name here too, and keep
 	   their cached messages */
@@ -1179,7 +1223,11 @@ int mail_folder_rename(ACCOUNT *a, FINFO *fi, const char *name, char *newserver,
 	folders_save(a);
 	if (newserver)
 		str_copy(newserver, to, size);
-	return mail_refresh_folders(a);
+	/* some servers drop the connection right after a rename: the rename
+	   is done, so connect again for the folder list */
+	if (mail_refresh_folders(a))
+		return 1;
+	return !a->im && !a->cut && mail_refresh_folders(a);
 }
 
 int mail_folder_delete(ACCOUNT *a, FINFO *fi)

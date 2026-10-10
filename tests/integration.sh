@@ -280,6 +280,21 @@ out=$(run rename 1 INBOX "Other")
 expect "Inbox can't be renamed" "can't be renamed" "$out"
 SERVER="Archive 2026"
 
+# a server that drops the connection on RENAME after doing it: EMail
+# connects again, sees the new name and finishes the job
+if [ -z "${TLS:-}" ] && [ -z "${FALCON:-}" ]; then
+  python3 "$ROOT/tests/drop_proxy.py" $((IMAP + 900)) $IMAP & SMTPPID="$SMTPPID $!"
+  sleep 1
+  cp "$W/EMAIL.INF" "$W/EMAIL.INF.keep"
+  sed -i "0,/^port=$IMAP/s//port=$((IMAP + 900))/" "$W/EMAIL.INF"
+  out=$(run rename 1 "Archive 2026" "Archive 2027")
+  expect "rename survives a dropped connection" "^ok Archive 2027" "$out"
+  cp "$W/EMAIL.INF.keep" "$W/EMAIL.INF"
+  out=$(run list 1 "Archive 2027")
+  expect "and the folder keeps its messages" "שלום" "$out"
+  SERVER="Archive 2027"
+fi
+
 # a message expunged by another client disappears from the mirror
 doveadm -c "$D/dovecot.conf" expunge -u dana mailbox INBOX header Message-ID "cp1255@example.org" || echo "doveadm expunge failed"
 out=$(run sync 1 INBOX)

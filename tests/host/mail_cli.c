@@ -19,6 +19,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <string.h>
 #include "plat.h"
 #include "store.h"
@@ -71,7 +72,8 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	store_init(argv[1]);
-	atexit(conn_log_flush);		/* every way out, error returns too */
+	atexit(conn_log_flush);
+	signal(SIGPIPE, SIG_IGN);	/* a dropped connection is an error, not the end */		/* every way out, error returns too */
 	if (getenv("MAIL_LOG")) {
 		path_join(conn_logfile, sizeof(conn_logfile), argv[1], "EMAIL.LOG");
 	}
