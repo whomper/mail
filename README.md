@@ -5,7 +5,7 @@
 An e-mail program for the Atari ST, STE, TT and Falcon, written in C for
 GEM. It reads mail over IMAP or POP3, sends it over SMTP, keeps a mirror
 of your IMAP folders on disk so you can read offline, and reads and
-writes Hebrew.
+writes Hebrew. 
 
 - IMAP with a local mirror: headers of the newest messages and every
   message you've read, kept in step with the server; big folders load
