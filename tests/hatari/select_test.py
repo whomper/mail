@@ -93,7 +93,7 @@ try:
     r.shot("s2-picker")
     # the dialog's arrows, its second row (Archive) and OK on a 640x480 screen
     if True:
-        dx, dy, rx, ry, ox, oy = 472, 321, 250, 161, 431, 385
+        dx, dy, rx, ry, ox, oy = 420, 321, 250, 161, 380, 385
         r.click(dx, dy)                  # next page, in place
         time.sleep(2)
         r.shot("s3-page2")

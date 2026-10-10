@@ -634,28 +634,34 @@ int dlg_ask(const char *title, const char *label, char *buf, short len)
 /* ---------------- pickers ---------------- */
 
 #define PROWS 12			/* rows shown at a time */
-#define PW 38				/* their width in characters */
+#define PW 38				/* the widest list, in characters */
 
 /* choose one of n strings (Atari charset); -1 = cancelled. One dialog
    that stays open: a framed list with arrows to page through it (the
    list is redrawn in place), a click picks a row, OK or a double click
    takes it. */
-static short pick(const char *title, const char **items, short n)
+static short pick_w(const char *title, const char **items, short n, short lw)
 {
 	static char shown[PROWS][PW + 2], count[40];
 	short first = 0, cur = -1, row[PROWS], box, b_up, b_down, b_ok, b_cancel, f_count;
-	short x, y, w, h, bx, by, r, i, result = -1;
+	short x, y, w, h, bx, by, r, i, result = -1, tw = (short)strlen(title);
 
-	d_begin(PW + 8, PROWS + 8);
+	if (lw > PW)
+		lw = PW;
+	if (lw < 22)
+		lw = 22;
+	if (tw > lw + 2)
+		lw = tw > PW ? PW : tw - 2;
+	d_begin(lw + 8, PROWS + 8);
 	d_add(G_STRING, 0, 0, (long)title, 2, 1, (short)strlen(title), 1);
-	box = d_add(G_BOX, 0, 0, 0x00FF1100L, 2, 3, PW, PROWS);
+	box = d_add(G_BOX, 0, 0, 0x00FF1100L, 2, 3, lw, PROWS);
 	for (i = 0; i < PROWS; i++)
-		row[i] = d_add(G_STRING, TOUCHEXIT, 0, (long)shown[i], 2, 3 + i, PW, 1);
-	b_up = d_add(G_BOXCHAR, TOUCHEXIT, 0, 0x01FF1100L, PW + 3, 3, 2, 1);
-	b_down = d_add(G_BOXCHAR, TOUCHEXIT, 0, 0x02FF1100L, PW + 3, 2 + PROWS, 2, 1);
-	f_count = d_add(G_STRING, 0, 0, (long)count, 2, PROWS + 4, 30, 1);
-	b_cancel = d_button(PW - 18, PROWS + 6, 10, "Cancel", EXIT);
-	b_ok = d_button(PW - 6, PROWS + 6, 10, "OK", EXIT | DEFAULT);
+		row[i] = d_add(G_STRING, TOUCHEXIT, 0, (long)shown[i], 2, 3 + i, lw, 1);
+	b_up = d_add(G_BOXCHAR, TOUCHEXIT, 0, 0x01FF1100L, lw + 3, 3, 2, 1);
+	b_down = d_add(G_BOXCHAR, TOUCHEXIT, 0, 0x02FF1100L, lw + 3, 2 + PROWS, 2, 1);
+	f_count = d_add(G_STRING, 0, 0, (long)count, 2, PROWS + 4, lw, 1);
+	b_cancel = d_button(lw - 18, PROWS + 6, 10, "Cancel", EXIT);
+	b_ok = d_button(lw - 6, PROWS + 6, 10, "OK", EXIT | DEFAULT);
 	d_end();
 
 	for (;;) {
@@ -663,14 +669,14 @@ static short pick(const char *title, const char **items, short n)
 		short k;
 		for (k = 0; k < PROWS; k++) {
 			short it = first + k, len = 0;
-			memset(shown[k], ' ', PW);
-			shown[k][PW] = 0;
+			memset(shown[k], ' ', lw);
+			shown[k][lw] = 0;
 			tree[row[k]].ob_state = 0;
 			if (it < n) {
 				const char *s = items[it];
 				len = (short)strlen(s);
-				if (len > PW - 2)
-					len = PW - 2;
+				if (len > lw - 2)
+					len = lw - 2;
 				/* GEM draws in storage order: lay Hebrew out first */
 				if (bidi_has_rtl(s, len))
 					bidi_visual(s, len, bidi_is_rtl(s, len), shown[k] + 1);
@@ -749,6 +755,11 @@ static short pick(const char *title, const char **items, short n)
 	return result >= 0 ? result : -1;
 }
 
+static short pick(const char *title, const char **items, short n)
+{
+	return pick_w(title, items, n, PW);
+}
+
 short dlg_pick_list(const char *title, const char **items, short n);
 short dlg_pick_list(const char *title, const char **items, short n)
 {
@@ -823,7 +834,7 @@ FINFO *dlg_pick_folder(ACCOUNT *a, const char *title)
 			k++;
 		}
 	}
-	r = pick(title, items, n);
+	r = pick_w(title, items, n, 25);	/* folder names are short */
 	return r < 0 ? 0 : map[r];
 }
 
