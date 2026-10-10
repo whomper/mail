@@ -118,6 +118,7 @@ static void prog_end(void)
 {
 	prog.on = 0;
 	conn_tick = 0;
+	status("");			/* done: the line never says it still works */
 }
 
 static int offline(void)
@@ -183,8 +184,24 @@ int mail_connect(ACCOUNT *a)
 	if (offline())
 		return 0;
 	if (a->im) {
-		/* reuse a connection used in the last few minutes; check older ones */
-		if (pf_ms() - a->im_used < 120000UL || imap_noop(a->im) > 0) {
+		/* reuse a connection used in the last few minutes; ask an older
+		   one whether it is still there. Gateways, routers and providers
+		   drop idle connections without a word, so the answer gets 10
+		   seconds, not the usual minute: a live one replies at once, and
+		   a slow one taken for dead costs a reconnect, not an error */
+		int alive = pf_ms() - a->im_used < 120000UL;
+		if (!alive) {
+			long keep = a->im->c->timeout_ms;
+			a->im->c->timeout_ms = 10000;
+			alive = imap_noop(a->im) > 0;
+			if (a->im)
+				a->im->c->timeout_ms = keep;
+			if (!alive && a->im) {
+				conn_log("IMAP", " -- ", "the idle connection was dropped: connecting again", 50);
+				a->im->c->dead = 1;
+			}
+		}
+		if (alive) {
 			a->im_used = pf_ms();
 			return 1;
 		}
@@ -209,6 +226,7 @@ int mail_connect(ACCOUNT *a)
 	}
 	a->cut = 0;
 	a->im_used = pf_ms();
+	status("");			/* connected: "connecting to..." is over */
 	return 1;
 }
 
@@ -301,6 +319,7 @@ int mail_refresh_folders(ACCOUNT *a)
 	}
 	folders_save(a);
 	timing(t0, b0, "folder list, %d folders", a->nfolders);
+	status("%s: %d folders", a->name, a->nfolders);
 	return 1;
 }
 

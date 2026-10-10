@@ -405,15 +405,16 @@ void imap_logout(IMAP *im)
 {
 	if (!im)
 		return;
-	if (im->c) {
+	if (im->c && !im->c->dead) {
 		char tag[8];
 		snprintf(tag, sizeof(tag), "T%04u", ++im->tag);
 		conn_cmd(im->c, 0, "%s LOGOUT", tag);
 		im->c->timeout_ms = 3000;
 		while (read_response(im) > 0 && strncmp(im->resp.s, tag, 5))
 			;
-		conn_close(im->c);
 	}
+	if (im->c)
+		conn_close(im->c);
 	sb_free(&im->resp);
 	free(im);
 }

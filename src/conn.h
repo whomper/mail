@@ -18,6 +18,7 @@ typedef struct {
 	char buf[4096];
 	long pos, len;
 	long timeout_ms;
+	int dead;		/* known to be gone: close without a goodbye */
 	char err[160];
 	const char *name;		/* "IMAP", "POP3", "SMTP" for the log */
 } CONN;
