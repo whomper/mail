@@ -267,7 +267,9 @@ picks a folder and OK (or a double click) moves the messages there.
 messages of each folder, as many as you have loaded (100 to start with),
 and the messages you have read; the counts in the folder pane are the
 server's. Changes made elsewhere (read, deleted, moved on your phone) show up
-at the next check. Opening, flagging or marking a message changes it at once
+at the next check. The folder list is read from the server once each time
+EMail starts (at the first check), so folders made, renamed or deleted
+elsewhere show up then; Folder > Refresh folder list reads it any time. Opening, flagging or marking a message changes it at once
 on the Atari; EMail tells the server in one go when you pause for a few
 seconds, and at the latest when you quit. A folder you opened in the last two
 minutes opens straight from disk; Check mail always asks the server. Deleting moves a message to Trash on the server;

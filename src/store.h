@@ -66,6 +66,7 @@ typedef struct {
 	   (or the timed check) connects again */
 	short cut;
 	char cuterr[160];
+	short listed;		/* the folder list was read from the server this session */
 } ACCOUNT;
 
 /* where a screen font keeps the Hebrew letters */

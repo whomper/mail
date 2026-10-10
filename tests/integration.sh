@@ -220,8 +220,17 @@ this was written in EMail.
 MSG
 out=$(run send 1 "$W/msg.txt")
 expect "message sent over SMTP" "sent: 1" "$out"
+# a folder made elsewhere (on a phone): the first check of a session reads the folder list
+python3 - $IMAP <<'PY'
+import imaplib, sys
+m = imaplib.IMAP4("127.0.0.1", int(sys.argv[1]))
+m.login("dana", "secret")
+m.create("Fresh")
+m.logout()
+PY
 out=$(run check 1)
 expect "the sent message arrives (To + Bcc)" "new: 2" "$out"
+grep -q "Fresh" "$W/EMAIL/ACCT1/FOLDERS.LST" && { PASS=$((PASS+1)); echo "ok   a folder made elsewhere shows up at the next start"; } || { FAIL=$((FAIL+1)); echo "FAIL new folder not listed"; }
 out=$(run list 1 INBOX)
 expect "Hebrew subject of the new mail" "תשובה from the Falcon" "$out"
 U4=$(uid_of "$out" "תשובה")

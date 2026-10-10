@@ -160,11 +160,15 @@ static void click(WIN *w, short mx, short my, short clicks, short kstate)
 	if (!ent[i].fi) {
 		/* the account line: check this account */
 		long n;
+		char server[160];
+		str_copy(server, cur_finfo ? cur_finfo->server : "", sizeof(server));
 		busy(1);
 		mail_err[0] = 0;
 		if (!mail_check(ent[i].a, &n) && mail_err[0])
 			alert(1, "[1][%s][ OK ]", mail_err);
 		busy(0);
+		if (cur_acct == ent[i].a)
+			refind_current(server);
 		folders_build();
 		return;
 	}
@@ -186,11 +190,15 @@ static void rclick(WIN *w, short mx, short my)
 		r = popup(mx, my, lab, 5);
 		if (r == 0) {
 			long n;
+			char server[160];
+			str_copy(server, cur_finfo ? cur_finfo->server : "", sizeof(server));
 			busy(1);
 			mail_err[0] = 0;
 			if (!mail_check(a, &n) && mail_err[0])
 				alert(1, "[1][%s][ OK ]", mail_err);
 			busy(0);
+			if (cur_acct == a)
+				refind_current(server);
 			folders_build();
 		} else if (r == 1) {
 			editor_open(a, compose_new(a, ""), 0, 0);

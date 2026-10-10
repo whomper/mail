@@ -267,7 +267,7 @@ void set_hebrew_kbd(short on)
 }
 
 /* folder lists can be rebuilt by the server: find the open one again */
-static void refind_current(const char *server)
+void refind_current(const char *server)
 {
 	FOLDER *keep = cur_folder;
 	if (!cur_acct)
@@ -539,11 +539,15 @@ static void cmd_accounts(void)
 	if (r > 0 && !opt.offline &&
 	    alert(1, "[2][Check this account now?][Check|Later]") == 1) {
 		long n;
+		char server[160];
+		str_copy(server, cur_finfo ? cur_finfo->server : "", sizeof(server));
 		busy(1);
 		mail_err[0] = 0;
 		if (!mail_check(a, &n) && mail_err[0])
 			alert(1, "[1][%s][ OK ]", mail_err);
 		busy(0);
+		if (cur_acct == a)
+			refind_current(server);
 		folders_build();
 	}
 }

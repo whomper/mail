@@ -319,6 +319,7 @@ int mail_refresh_folders(ACCOUNT *a)
 	}
 	folders_save(a);
 	timing(t0, b0, "folder list, %d folders", a->nfolders);
+	a->listed = 1;
 	status("%s: %d folders", a->name, a->nfolders);
 	return 1;
 }
@@ -702,7 +703,9 @@ int mail_check(ACCOUNT *a, long *newmsgs)
 		ok = pop_check(a, newmsgs);
 	} else {
 		FINFO *in;
-		if (!a->nfolders || !folder_role(a, FR_INBOX)) {
+		/* the folder list once per session (folders made, renamed or
+		   deleted elsewhere), and whenever there is no Inbox */
+		if (!a->listed || !a->nfolders || !folder_role(a, FR_INBOX)) {
 			if (!mail_refresh_folders(a))
 				return 0;
 		}
